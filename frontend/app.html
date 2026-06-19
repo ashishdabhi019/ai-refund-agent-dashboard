@@ -642,7 +642,7 @@
         }
       }
 
-      function showTyping() {
+      function showTyping(afterElementId = null) {
         const container = document.getElementById("chatMessages");
         if (!container) return;
 
@@ -653,33 +653,43 @@
         }
 
         let typing = document.getElementById("typing");
-        if (!typing) {
-          typing = document.createElement("div");
-          typing.id = "typing";
-          typing.className = "msg-container agent";
-          typing.style.marginTop = "10px";
-          typing.innerHTML = `
-            <div class="msg-avatar-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
-              <div class="msg-avatar" style="margin-top: 0;">
-                <i class="bi bi-robot"></i>
-              </div>
-              <span class="msg-author-below" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">Shield AI</span>
+        if (typing) {
+          typing.remove();
+        }
+
+        typing = document.createElement("div");
+        typing.id = "typing";
+        typing.className = "msg-container agent";
+        typing.style.marginTop = "10px";
+        typing.innerHTML = `
+          <div class="msg-avatar-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
+            <div class="msg-avatar" style="margin-top: 0;">
+              <i class="bi bi-robot"></i>
             </div>
-            <div class="msg-bubble-wrapper">
-              <div class="msg-bubble" style="width: fit-content; padding: 12px 18px; min-width: 60px;">
-                <div style="display: flex; gap: 4px; align-items: center;">
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                </div>
-              </div>
-              <div class="msg-actions" style="display: flex; align-items: center; gap: 6px; margin-top: 4px; margin-left: 2px;">
-                <span class="msg-time" style="font-size: 0.72rem; color: var(--text-secondary); opacity: 0.8;">typing...</span>
+            <span class="msg-author-below" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">Shield AI</span>
+          </div>
+          <div class="msg-bubble-wrapper">
+            <div class="msg-bubble" style="width: fit-content; padding: 12px 18px; min-width: 60px;">
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
               </div>
             </div>
-          `;
+          </div>
+        `;
+
+        let targetEl = null;
+        if (afterElementId) {
+          targetEl = document.getElementById(afterElementId);
+        }
+
+        if (targetEl) {
+          targetEl.parentNode.insertBefore(typing, targetEl.nextSibling);
+        } else {
           container.appendChild(typing);
         }
+
         typing.style.display = "flex";
         container.scrollTop = container.scrollHeight;
       }
@@ -690,6 +700,9 @@
           typing.remove();
         }
       }
+
+      let chatMessageQueue = [];
+      let isProcessingChatQueue = false;
 
       async function sendMessage(isVoice = false) {
         const input = document.getElementById("userInput");
@@ -704,65 +717,137 @@
           greetingSent = true;
         }
 
-        addMessage(text, "user");
+        const msgId = "msg-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+        const status = isProcessingChatQueue ? "queued" : null;
+        addMessage(text, "user", false, null, status, msgId);
+
         input.value = "";
         adjustInputHeight();
 
-        showTyping();
+        // Push current message to queue
+        chatMessageQueue.push({ id: msgId, text, isVoice });
+        
+        // Trigger queue processing
+        processChatMessageQueue();
+      }
 
-        try {
-          const res = await fetch(`${API}/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text, session_id: sessionId }),
-          });
-          const data = await res.json();
-          hideTyping();
+      async function processChatMessageQueue() {
+        if (isProcessingChatQueue) return;
+        isProcessingChatQueue = true;
 
-          let orderId = null;
-          if (data.logs && data.logs.length > 0) {
-            const toolCall = data.logs.find(
-              (l) => l.step === "TOOL_CALL" && l.input && (l.input.order_id || l.input.orderId)
+        while (chatMessageQueue.length > 0) {
+          const currentMsg = chatMessageQueue.shift();
+          
+          // Update user message bubble status to processing
+          const msgEl = document.getElementById(currentMsg.id);
+          if (msgEl) {
+            const wasQueued = msgEl.classList.contains("queued");
+            msgEl.classList.remove("queued");
+            
+            if (wasQueued) {
+              msgEl.classList.add("processing");
+              const footer = msgEl.querySelector(".msg-footer");
+              if (footer) {
+                let badge = footer.querySelector(".queue-status-badge");
+                if (!badge) {
+                  badge = document.createElement("span");
+                  badge.className = "queue-status-badge processing";
+                  footer.insertBefore(badge, footer.firstChild);
+                } else {
+                  badge.className = "queue-status-badge processing";
+                }
+                badge.innerHTML = `<i class="bi bi-arrow-repeat spin"></i> Processing`;
+              }
+            }
+          }
+
+          showTyping(currentMsg.id);
+
+          try {
+            const res = await fetch(`${API}/chat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: currentMsg.text, session_id: sessionId }),
+            });
+            const data = await res.json();
+            hideTyping();
+
+            // Remove status badge and processing class when resolved
+            if (msgEl) {
+              msgEl.classList.remove("processing");
+              const badge = msgEl.querySelector(".queue-status-badge");
+              if (badge) {
+                badge.remove();
+              }
+            }
+
+            let orderId = null;
+            if (data.logs && data.logs.length > 0) {
+              const toolCall = data.logs.find(
+                (l) => l.step === "TOOL_CALL" && l.input && (l.input.order_id || l.input.orderId)
+              );
+              if (toolCall) {
+                orderId = toolCall.input.order_id || toolCall.input.orderId;
+              }
+            }
+            if (!orderId) {
+              const match = currentMsg.text.match(/ORD\d+/i);
+              if (match) {
+                orderId = match[0].toUpperCase();
+              }
+            }
+            const logLabel = orderId || "General Chat";
+            const existingIndex = window.allQueryLogs.findIndex(item => item.label === logLabel);
+            const newEntry = {
+              label: logLabel,
+              logs: data.logs || [],
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            if (existingIndex !== -1) {
+              window.allQueryLogs[existingIndex] = newEntry;
+            } else {
+              window.allQueryLogs.push(newEntry);
+            }
+
+            addMessage(data.response, "agent", false, data.logs, null, null, currentMsg.id);
+            renderSidebarTabs(logLabel);
+
+            if (currentMsg.isVoice) {
+              speakText(data.response);
+            }
+
+            fetchOrders();
+          } catch (e) {
+            console.error("Chat Error:", e);
+            hideTyping();
+
+            // Clean up visual status of message on error
+            if (msgEl) {
+              msgEl.classList.remove("processing", "queued");
+              const badge = msgEl.querySelector(".queue-status-badge");
+              if (badge) {
+                badge.remove();
+              }
+            }
+
+            addMessage(
+              "Connection failed. Please ensure the backend server is running on port 8000.",
+              "system",
+              false,
+              null,
+              null,
+              null,
+              currentMsg.id
             );
-            if (toolCall) {
-              orderId = toolCall.input.order_id || toolCall.input.orderId;
-            }
-          }
-          if (!orderId) {
-            const match = text.match(/ORD\d+/i);
-            if (match) {
-              orderId = match[0].toUpperCase();
-            }
-          }
-          const logLabel = orderId || "General Chat";
-          const existingIndex = window.allQueryLogs.findIndex(item => item.label === logLabel);
-          const newEntry = {
-            label: logLabel,
-            logs: data.logs || [],
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          };
-          if (existingIndex !== -1) {
-            window.allQueryLogs[existingIndex] = newEntry;
-          } else {
-            window.allQueryLogs.push(newEntry);
           }
 
-          addMessage(data.response, "agent");
-          renderSidebarTabs(logLabel);
-
-          if (isVoice) {
-            speakText(data.response);
+          // A small delay between processing multiple rapid messages (for a natural flow)
+          if (chatMessageQueue.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, 800));
           }
-
-          fetchOrders();
-        } catch (e) {
-          console.error("Chat Error:", e);
-          hideTyping();
-          addMessage(
-            "Connection failed. Please ensure the backend server is running on port 8000.",
-            "system",
-          );
         }
+
+        isProcessingChatQueue = false;
       }
 
       // ─── VOICE PIPELINE (Web Speech API — 100% Free) ───────────────────────
@@ -1060,7 +1145,7 @@
       window.speechSynthesis.onvoiceschanged = () =>
         window.speechSynthesis.getVoices();
 
-      function addMessage(text, type, keepDashboard = false) {
+      function addMessage(text, type, keepDashboard = false, logs = null, status = null, msgId = null, insertAfterId = null) {
         const container = document.getElementById("chatMessages");
 
         // Hide welcome dashboard if present
@@ -1073,6 +1158,12 @@
 
         const div = document.createElement("div");
         div.className = `msg-container ${type}`;
+        if (msgId) {
+          div.id = msgId;
+        }
+        if (type === "user" && status) {
+          div.classList.add(status);
+        }
 
         let avatarIcon = "bi-person";
         let authorName = "You";
@@ -1130,6 +1221,21 @@
               </div>
             `;
           } else {
+            let statusBadge = "";
+            if (status === "queued") {
+              statusBadge = `
+                <span class="queue-status-badge">
+                  <i class="bi bi-clock-history"></i> In queue
+                </span>
+              `;
+            } else if (status === "processing") {
+              statusBadge = `
+                <span class="queue-status-badge processing">
+                  <i class="bi bi-arrow-repeat spin"></i> Processing
+                </span>
+              `;
+            }
+
             innerContent = `
               <div class="msg-avatar-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
                 <div class="msg-avatar" style="margin-top: 0;">
@@ -1139,7 +1245,8 @@
               </div>
               <div class="msg-bubble-wrapper">
                 <div class="msg-bubble">${formattedText}</div>
-                <div class="msg-footer" style="display: flex; justify-content: flex-end; align-items: center; margin-top: 4px; margin-right: 4px;">
+                <div class="msg-footer" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; margin-right: 4px;">
+                  ${statusBadge}
                   <span class="msg-time" style="font-size: 0.72rem; color: var(--text-secondary); opacity: 0.8;">
                     ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </span>
@@ -1150,74 +1257,184 @@
         }
 
         div.innerHTML = innerContent;
-        container.appendChild(div);
+        
+        let targetEl = null;
+        if (insertAfterId) {
+          targetEl = document.getElementById(insertAfterId);
+        }
+
+        if (targetEl) {
+          targetEl.parentNode.insertBefore(div, targetEl.nextSibling);
+        } else {
+          container.appendChild(div);
+        }
 
         // Detect approved / denied status cards
         if (type === "agent") {
-          if (text.includes("APPROVED")) {
-            const amountMatch = text.match(/Amount:\s*₹([\d,]+)/);
-            const timelineMatch = text.match(/Timeline:\s*(.*?)(?:\n|<br>|$)/);
-            const emailMatch = text.match(
-              /Notification Sent to:\s*(.*?)(?:\n|<br>|$)/,
-            );
-            const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+          let isApproved = false;
+          let isDenied = false;
+          let isWarning = false;
+          let amount = "";
+          let timeline = "5-7 business days";
+          let email = "";
+          let orderId = "";
+          let reason = "";
+          let customerName = "";
+          let productName = "";
+          let customerTier = "";
 
-            const clean = (val) =>
-              val
-                ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim()
-                : "";
+          // 1. Try to extract from logs if available
+          if (logs && Array.isArray(logs)) {
+            const approveCall = logs.find(l => l.step === "TOOL_CALL" && l.tool === "approve_refund");
+            const approveResult = logs.find(l => l.step === "TOOL_RESULT" && l.tool === "approve_refund" && l.result && l.result.success);
+            
+            if (approveResult) {
+              isApproved = true;
+              orderId = (approveCall && approveCall.input && approveCall.input.order_id) || "";
+              amount = approveResult.result.refund_amount ? "₹" + approveResult.result.refund_amount : "";
+              timeline = approveResult.result.timeline || "5-7 business days";
+              email = approveResult.result.customer_email || "";
+            } else {
+              const denyCall = logs.find(l => l.step === "TOOL_CALL" && l.tool === "deny_refund");
+              const eligibilityCall = logs.find(l => l.step === "TOOL_CALL" && l.tool === "check_refund_eligibility");
+              const eligibilityResult = logs.find(l => l.step === "TOOL_RESULT" && l.tool === "check_refund_eligibility" && l.result);
+              
+              if (denyCall || (eligibilityResult && !eligibilityResult.result.eligible)) {
+                orderId = (denyCall && denyCall.input && denyCall.input.order_id) || 
+                          (eligibilityCall && eligibilityCall.input && eligibilityCall.input.order_id) || "";
+                reason = (denyCall && denyCall.input && denyCall.input.reason) || 
+                         (eligibilityResult && eligibilityResult.result.reason) || 
+                         "Ineligible under e-commerce refund criteria";
+                
+                const lookupResult = logs.find(l => l.step === "TOOL_RESULT" && l.tool === "lookup_order" && l.result && !l.result.error);
+                if (lookupResult) {
+                  customerName = lookupResult.result.name || "";
+                  productName = lookupResult.result.product || "";
+                  amount = lookupResult.result.amount ? "₹" + lookupResult.result.amount : "";
+                  customerTier = lookupResult.result.tier || "";
+                  
+                  if (lookupResult.result.delivery_status === "Not Delivered") {
+                    isWarning = true;
+                  }
+                }
 
-            const amount = amountMatch ? "₹" + clean(amountMatch[1]) : "";
-            const timeline = timelineMatch
-              ? clean(timelineMatch[1])
-              : "5-7 business days";
-            const email = emailMatch ? clean(emailMatch[1]) : "";
-            const orderId = orderIdMatch
-              ? clean(orderIdMatch[1]).toUpperCase()
-              : "";
+                if (reason.toLowerCase().includes("not delivered") || reason.toLowerCase().includes("delivery pending")) {
+                  isWarning = true;
+                }
 
+                if (!isWarning) {
+                  isDenied = true;
+                }
+              }
+            }
+          }
+
+          // 2. Fallback to parsing text (for old messages / static history)
+          if (!isApproved && !isDenied && !isWarning) {
+            const upperText = text.toUpperCase();
+            if (upperText.includes("APPROVED")) {
+              isApproved = true;
+              const amountMatch = text.match(/Amount:\s*₹([\d,]+)/i) || text.match(/₹([\d,]+)/);
+              const timelineMatch = text.match(/Timeline:\s*(.*?)(?:\n|<br>|$)/i);
+              const emailMatch = text.match(/Notification Sent to:\s*(.*?)(?:\n|<br>|$)/i);
+              const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+
+              const clean = (val) =>
+                val ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim() : "";
+
+              amount = amountMatch ? "₹" + clean(amountMatch[1]) : "";
+              timeline = timelineMatch ? clean(timelineMatch[1]) : "5-7 business days";
+              email = emailMatch ? clean(emailMatch[1]) : "";
+              orderId = orderIdMatch ? clean(orderIdMatch[1]).toUpperCase() : "";
+            } else if (upperText.includes("NOT DELIVERED") || upperText.includes("DELIVERY PENDING") || upperText.includes("DELIVER AFTER")) {
+              isWarning = true;
+              const reasonMatch = text.match(/Reason:\s*(.*?)(?:\n|<br>|$)/i);
+              const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+
+              const clean = (val) =>
+                val ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim() : "";
+
+              reason = reasonMatch ? clean(reasonMatch[1]) : "Order is not delivered. Refund actions can only be processed after delivery.";
+              orderId = orderIdMatch ? clean(orderIdMatch[1]).toUpperCase() : "";
+            } else if (upperText.includes("DENIED")) {
+              isDenied = true;
+              const reasonMatch = text.match(/Reason:\s*(.*?)(?:\n|<br>|$)/i);
+              const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+
+              const clean = (val) =>
+                val ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim() : "";
+
+              reason = reasonMatch ? clean(reasonMatch[1]) : "Ineligible under e-commerce refund criteria";
+              orderId = orderIdMatch ? clean(orderIdMatch[1]).toUpperCase() : "";
+            }
+          }
+
+          // 3. Render the card
+          if (isApproved) {
             const statusCard = document.createElement("div");
             statusCard.className = "chat-status-card approved";
 
             statusCard.innerHTML = `
-              <div class="receipt-cut"></div>
               <div class="receipt-header">
-                <i class="bi bi-check-circle-fill"></i>
+                <i class="bi bi-shield-fill-check"></i>
                 <div>
                   <h4>REFUND TRANSACTION APPROVED</h4>
                   <span>Instant Credit Confirmed</span>
                 </div>
               </div>
               <div class="receipt-body">
-                ${orderId ? `<div class="receipt-row"><span class="receipt-label">Order ID</span><span class="receipt-val monospace">${orderId}</span></div>` : ""}
+                ${orderId ? `<div class="receipt-row"><span class="receipt-label">Order Reference</span><span class="receipt-val monospace">${orderId}</span></div>` : ""}
                 ${amount ? `<div class="receipt-row"><span class="receipt-label">Refund Amount</span><span class="receipt-val price-highlight">${amount}</span></div>` : ""}
                 <div class="receipt-row"><span class="receipt-label">Payout Source</span><span class="receipt-val">Store Ledger Credit</span></div>
                 <div class="receipt-row"><span class="receipt-label">ETA Timeline</span><span class="receipt-val success">${timeline}</span></div>
                 ${email ? `<div class="receipt-row"><span class="receipt-label">Ledger Email</span><span class="receipt-val">${email}</span></div>` : ""}
+                <div class="receipt-row" style="margin-top: 8px;"><span class="receipt-label">Resolution Status</span><span class="receipt-val success">Approved</span></div>
               </div>
-              <div class="receipt-barcode">
+              <div class="approved-info">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>Order ledger status updated to Refunded. Confirmation notification dispatched to ${email || "client"}.</span>
+              </div>
+              <div class="receipt-barcode" style="margin-top: 16px;">
                 <div class="barcode-lines"></div>
                 <span class="barcode-num">TX-${orderId || "MOCK"}-${Math.floor(Math.random() * 900000 + 100000)}</span>
               </div>
             `;
 
             div.querySelector(".msg-bubble-wrapper").appendChild(statusCard);
-          } else if (text.includes("denied") || text.includes("DENIED")) {
-            const reasonMatch = text.match(/Reason:\s*(.*?)(?:\n|<br>|$)/i);
-            const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+          } else if (isWarning) {
+            const statusCard = document.createElement("div");
+            statusCard.className = "chat-status-card warning";
 
-            const clean = (val) =>
-              val
-                ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim()
-                : "";
+            statusCard.innerHTML = `
+              <div class="warning-header">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <div>
+                  <h4>REFUND TRANSACTION BLOCKED</h4>
+                  <span>Delivery Pending Verification</span>
+                </div>
+              </div>
+              <div class="receipt-body">
+                ${orderId ? `<div class="receipt-row"><span class="receipt-label">Order Reference</span><span class="receipt-val monospace">${orderId}</span></div>` : ""}
+                ${customerName ? `<div class="receipt-row"><span class="receipt-label">Customer Name</span><span class="receipt-val">${customerName}</span></div>` : ""}
+                ${customerTier ? `<div class="receipt-row" style="align-items: center;"><span class="receipt-label">Customer Tier</span><span class="receipt-val"><span class="tier-badge ${customerTier.toLowerCase()}" style="font-size: 0.62rem; padding: 2px 8px; display: inline-block;">${customerTier}</span></span></div>` : ""}
+                ${productName ? `<div class="receipt-row"><span class="receipt-label">Product Details</span><span class="receipt-val">${productName}</span></div>` : ""}
+                ${amount ? `<div class="receipt-row"><span class="receipt-label">Original Price</span><span class="receipt-val warning-color">${amount}</span></div>` : ""}
+                <div class="receipt-row"><span class="receipt-label">Resolution Status</span><span class="receipt-val warning-color">Blocked (Pending Delivery)</span></div>
+                <div class="receipt-row" style="flex-direction: column; align-items: flex-start; gap: 6px; border-bottom: none; padding-bottom: 0; margin-top: 4px;">
+                  <span class="receipt-label">Block Trigger Description</span>
+                  <div class="warning-badge">
+                    <i class="bi bi-info-circle"></i> ${reason}
+                  </div>
+                </div>
+              </div>
+              <div class="receipt-barcode" style="margin-top: 16px;">
+                <div class="barcode-lines"></div>
+                <span class="barcode-num">TX-${orderId || "MOCK"}-${Math.floor(Math.random() * 900000 + 100000)}</span>
+              </div>
+            `;
 
-            const reason = reasonMatch
-              ? clean(reasonMatch[1])
-              : "Ineligible under e-commerce refund criteria";
-            const orderId = orderIdMatch
-              ? clean(orderIdMatch[1]).toUpperCase()
-              : "";
-
+            div.querySelector(".msg-bubble-wrapper").appendChild(statusCard);
+          } else if (isDenied) {
             const statusCard = document.createElement("div");
             statusCard.className = "chat-status-card denied";
 
@@ -1231,17 +1448,21 @@
               </div>
               <div class="receipt-body">
                 ${orderId ? `<div class="receipt-row"><span class="receipt-label">Order Reference</span><span class="receipt-val monospace">${orderId}</span></div>` : ""}
-                <div class="receipt-row" style="flex-direction: column; align-items: flex-start; gap: 6px; border-bottom: none; padding-bottom: 0;">
+                ${customerName ? `<div class="receipt-row"><span class="receipt-label">Customer Name</span><span class="receipt-val">${customerName}</span></div>` : ""}
+                ${customerTier ? `<div class="receipt-row" style="align-items: center;"><span class="receipt-label">Customer Tier</span><span class="receipt-val"><span class="tier-badge ${customerTier.toLowerCase()}" style="font-size: 0.62rem; padding: 2px 8px; display: inline-block;">${customerTier}</span></span></div>` : ""}
+                ${productName ? `<div class="receipt-row"><span class="receipt-label">Product Details</span><span class="receipt-val">${productName}</span></div>` : ""}
+                ${amount ? `<div class="receipt-row"><span class="receipt-label">Original Price</span><span class="receipt-val error">${amount}</span></div>` : ""}
+                <div class="receipt-row"><span class="receipt-label">Resolution Status</span><span class="receipt-val error">Declined</span></div>
+                <div class="receipt-row" style="flex-direction: column; align-items: flex-start; gap: 6px; border-bottom: none; padding-bottom: 0; margin-top: 4px;">
                   <span class="receipt-label">Violation Trigger Description</span>
                   <div class="violation-badge">
                     <i class="bi bi-exclamation-octagon"></i> ${reason}
                   </div>
                 </div>
-                <div class="receipt-row" style="margin-top: 8px;"><span class="receipt-label">Resolution Status</span><span class="receipt-val error">Declined</span></div>
               </div>
-              <div class="denied-escalation">
-                <i class="bi bi-info-circle-fill"></i>
-                <span>Order ledger status remains Delivered. If client escalates, trigger human takeover overrides.</span>
+              <div class="receipt-barcode" style="margin-top: 16px;">
+                <div class="barcode-lines"></div>
+                <span class="barcode-num">TX-${orderId || "MOCK"}-${Math.floor(Math.random() * 900000 + 100000)}</span>
               </div>
             `;
 
@@ -1549,6 +1770,12 @@
       const chatPanel = document.getElementById("chatPanel");
       const resizer = document.getElementById("resizer");
 
+      // Restore chat panel width from localStorage
+      const savedWidth = localStorage.getItem("chatPanelWidth");
+      if (savedWidth && chatPanel) {
+        chatPanel.style.width = savedWidth;
+      }
+
       resizer.addEventListener("mousedown", initResize);
 
       function initResize(e) {
@@ -1576,6 +1803,11 @@
           document.body.style.userSelect = "";
           window.removeEventListener("mousemove", doResize);
           window.removeEventListener("mouseup", stopResize);
+
+          // Save width to localStorage
+          if (chatPanel.style.width) {
+            localStorage.setItem("chatPanelWidth", chatPanel.style.width);
+          }
         }
 
         window.addEventListener("mousemove", doResize);

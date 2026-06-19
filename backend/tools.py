@@ -35,7 +35,7 @@ def check_refund_eligibility(order_id: str) -> dict:
     
     # Check delivery status
     if order["delivery_status"] == "Not Delivered":
-        return {"eligible": True, "reason": "Item not delivered - eligible for full refund"}
+        return {"eligible": False, "reason": "Order has not been delivered yet. Refund actions can only be processed after delivery."}
     
     # Check item condition
     condition_map = {
