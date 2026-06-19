@@ -1,6 +1,6 @@
 # AI Customer Support Refund Agent
 
-Built with: **Anthropic Claude API** (raw function calling), **FastAPI**, vanilla HTML/JS
+Built with: **Groq API (Llama 3.3)** (raw function calling), **FastAPI**, vanilla HTML/JS
 
 ## Setup & Installation
 
@@ -17,7 +17,7 @@ pip install -r backend/requirements.txt
 ### 2. Configure Environment Variables
 Create a `.env` file in the project root:
 ```env
-ANTHROPIC_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
 ```
 *(If no key is configured, the application will automatically run in local **Simulation Mode** fallback with high-fidelity mock tools so you can test all features immediately.)*
 

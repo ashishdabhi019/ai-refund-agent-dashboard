@@ -4,13 +4,10 @@ import json
 from tools import TOOLS, execute_tool
 from refund_policy import REFUND_POLICY
 
-# Detect key modes
-gemini_key = os.environ.get("GEMINI_API_KEY", "")
+# Detect key mode
 groq_key = os.environ.get("GROQ_API_KEY", "")
-
 is_groq = bool(groq_key and groq_key != "your_key_here" and groq_key != "")
-is_gemini = bool(gemini_key and gemini_key != "your_key_here" and gemini_key != "" and not is_groq)
-is_simulation = not is_groq and not is_gemini
+is_simulation = not is_groq
 
 SYSTEM_PROMPT = f"""You are a strict AI customer support agent for an e-commerce store. 
 Your job is to process refund requests by following the policy EXACTLY.
@@ -38,127 +35,6 @@ if is_groq:
             "parameters": t["input_schema"]
         }
     } for t in TOOLS]
-
-elif is_gemini:
-    import google.generativeai as genai
-    from google.generativeai import protos
-    
-    genai.configure(api_key=gemini_key)
-    
-    # Convert tool definitions to Gemini format
-    GEMINI_TOOLS = [{
-        "function_declarations": [
-            {
-                "name": t["name"],
-                "description": t["description"],
-                "parameters": t["input_schema"]
-            } for t in TOOLS
-        ]
-    }]
-
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=SYSTEM_PROMPT,
-        tools=GEMINI_TOOLS
-    )
-
-def run_gemini_agent(user_message: str, conversation_history: list) -> dict:
-    logs = [{"step": "USER_INPUT", "content": user_message}]
-    
-    # Safety check: if conversation_history contains items that don't match Gemini's Content format, clear/convert it
-    cleaned_history = []
-    if conversation_history:
-        first = conversation_history[0]
-        if isinstance(first, dict) and "parts" not in first and "content" in first:
-            # Convert dict history to Gemini format!
-            for msg in conversation_history:
-                role = "user" if msg["role"] == "user" else "model"
-                content = msg["content"]
-                if isinstance(content, list):
-                    text_parts = [block["text"] for block in content if block.get("type") == "text"]
-                    parts = [" ".join(text_parts)]
-                else:
-                    parts = [str(content)]
-                cleaned_history.append({
-                    "role": role,
-                    "parts": parts
-                })
-        else:
-            cleaned_history = conversation_history
-
-    # Start chat and send the message
-    chat = model.start_chat(history=cleaned_history)
-    try:
-        response = chat.send_message(user_message)
-    except Exception as e:
-        error_msg = str(e)
-        if "Quota exceeded" in error_msg or "429" in error_msg or "ResourceExhausted" in error_msg:
-            friendly_text = "⚠️ **Gemini API Rate Limit Exceeded:** The free tier rate limit has been reached. Please wait a few seconds and try again, or remove/comment the GEMINI_API_KEY in `.env` to use the offline simulator."
-        else:
-            friendly_text = f"⚠️ **Gemini API Error:** {error_msg}"
-        logs.append({"step": "FINAL_ANSWER", "content": friendly_text})
-        return {
-            "response": friendly_text,
-            "logs": logs,
-            "messages": conversation_history
-        }
-    
-    # Agent loop for tool calls
-    while True:
-        function_calls = []
-        if hasattr(response, "parts") and response.parts:
-            for part in response.parts:
-                if hasattr(part, "function_call") and part.function_call.name:
-                    function_calls.append(part.function_call)
-
-        if not function_calls:
-            final_text = ""
-            try:
-                final_text = response.text
-            except Exception as e:
-                for part in response.parts:
-                    if hasattr(part, "text") and part.text:
-                        final_text += part.text
-            
-            logs.append({"step": "FINAL_ANSWER", "content": final_text})
-            return {
-                "response": final_text,
-                "logs": logs,
-                "messages": chat.history
-            }
-
-        # Execute tool calls
-        function_responses = []
-        for fc in function_calls:
-            tool_input = dict(fc.args)
-            logs.append({"step": "TOOL_CALL", "tool": fc.name, "input": tool_input})
-
-            result = execute_tool(fc.name, tool_input)
-            logs.append({"step": "TOOL_RESULT", "tool": fc.name, "result": result})
-
-            function_responses.append(
-                protos.Part(
-                    function_response=protos.FunctionResponse(
-                        name=fc.name,
-                        response={"result": json.dumps(result)}
-                    )
-                )
-            )
-
-        try:
-            response = chat.send_message(function_responses)
-        except Exception as e:
-            error_msg = str(e)
-            if "Quota exceeded" in error_msg or "429" in error_msg or "ResourceExhausted" in error_msg:
-                friendly_text = "⚠️ **Gemini API Rate Limit Exceeded:** The free tier rate limit has been reached. Please wait a few seconds and try again, or remove/comment the GEMINI_API_KEY in `.env` to use the offline simulator."
-            else:
-                friendly_text = f"⚠️ **Gemini API Error:** {error_msg}"
-            logs.append({"step": "FINAL_ANSWER", "content": friendly_text})
-            return {
-                "response": friendly_text,
-                "logs": logs,
-                "messages": conversation_history
-            }
 
 def run_groq_agent(user_message: str, conversation_history: list) -> dict:
     logs = [{"step": "USER_INPUT", "content": user_message}]
@@ -302,7 +178,7 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
                     break
     
     if not order_id:
-        final_answer = "Hello! I am your AI refund support agent. Please provide your Order ID (e.g. ORD001) so I can assist you with your refund request.\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY or GEMINI_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = "Hello! I am your AI refund support agent. Please provide your Order ID (e.g. ORD001) so I can assist you with your refund request.\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY to your .env file to enable the live agent.)*"
         logs.append({
             "step": "FINAL_ANSWER",
             "content": final_answer
@@ -335,7 +211,7 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
     })
     
     if "error" in order:
-        final_answer = f"I looked up order ID {order_id} in our CRM database but could not find it. Please verify your order ID and try again.\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY or GEMINI_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = f"I looked up order ID {order_id} in our CRM database but could not find it. Please verify your order ID and try again.\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY to your .env file to enable the live agent.)*"
         logs.append({
             "step": "FINAL_ANSWER",
             "content": final_answer
@@ -378,7 +254,7 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
             "result": refund_result
         })
         
-        final_answer = f"Hello {order['name']}. I have successfully processed your refund request for your order {order_id} ({order['product']}).\n\n**Refund Status:** APPROVED\n**Amount:** ₹{order['amount']}\n**Timeline:** {refund_result['timeline']}\n**Notification Sent to:** {order['email']}\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY or GEMINI_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = f"Hello {order['name']}. I have successfully processed your refund request for your order {order_id} ({order['product']}).\n\n**Refund Status:** APPROVED\n**Amount:** ₹{order['amount']}\n**Timeline:** {refund_result['timeline']}\n**Notification Sent to:** {order['email']}\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY to your .env file to enable the live agent.)*"
     else:
         reason = eligibility.get("reason", "Not eligible under standard refund policy")
         logs.append({
@@ -393,7 +269,7 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
             "result": deny_result
         })
         
-        final_answer = f"Hello {order['name']}. I've checked the details for order {order_id} ({order['product']}). Unfortunately, your refund request has been denied.\n\n**Reason:** {reason}\n\nIf you have any questions, please let me know.\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY or GEMINI_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = f"Hello {order['name']}. I've checked the details for order {order_id} ({order['product']}). Unfortunately, your refund request has been denied.\n\n**Reason:** {reason}\n\nIf you have any questions, please let me know.\n\n*(Note: Running in Simulation Mode. Add a valid GROQ_API_KEY to your .env file to enable the live agent.)*"
         
     logs.append({
         "step": "FINAL_ANSWER",
@@ -416,7 +292,5 @@ def run_agent(user_message: str, conversation_history: list) -> dict:
     """Run the appropriate agent depending on API Key status"""
     if is_simulation:
         return run_simulation_agent(user_message, conversation_history)
-    elif is_groq:
-        return run_groq_agent(user_message, conversation_history)
     else:
-        return run_gemini_agent(user_message, conversation_history)
+        return run_groq_agent(user_message, conversation_history)
