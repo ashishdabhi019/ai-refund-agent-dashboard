@@ -1,0 +1,21 @@
+# Environment variables (contains private API keys)
+.env
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Node.js dependencies
+node_modules/
+
+# Python cache and byte-compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# OS-specific files
+.DS_Store
+Thumbs.db

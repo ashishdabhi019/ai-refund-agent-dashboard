@@ -1,0 +1,10 @@
+{
+  "name": "ai-refund-agent",
+  "version": "1.0.0",
+  "description": "AI Customer Support Refund Agent Dashboard",
+  "scripts": {
+    "frontend": "npx -y http-server frontend -p 3000 -c-1",
+    "backend": "cd backend && ../venv/bin/uvicorn main:app --reload",
+    "dev": "npx -y concurrently \"npm run backend\" \"npm run frontend\""
+  }
+}

@@ -1,0 +1,1586 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Refund Agent Dashboard</title>
+    <!-- Modern Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Bootstrap Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    />
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="app.css?v=14" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <i class="bi bi-shield-check"></i>
+        <h1>Refund Shield AI</h1>
+      </div>
+      <div class="status-container">
+        <button class="reset-btn" onclick="resetChat()">
+          <i class="bi bi-arrow-clockwise"></i> Reset System
+        </button>
+        <button class="logs-toggle-btn" onclick="toggleAdminSidebar()">
+          <i class="bi bi-diagram-3-fill"></i> Reasoning Steps
+        </button>
+      </div>
+    </header>
+
+    <div class="main">
+      <!-- Chat Panel -->
+      <div class="chat-panel" id="chatPanel">
+        <div class="panel-header">
+          <i class="bi bi-chat-dots-fill"></i> Support Assistant Chat
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <!-- Will be dynamically populated. Initialized to WELCOME_HTML inside DOMContentLoaded -->
+        </div>
+
+
+        <div class="quick-prompts-wrapper">
+          <div class="qp-title">
+            <i class="bi bi-lightning-charge-fill"></i> Quick Test Scenarios
+          </div>
+          <div class="quick-prompts">
+            <span
+              class="qp"
+              onclick="quickSend('I want a refund for order ORD001')"
+            >
+              <i class="bi bi-exclamation-octagon"></i> ORD001 (Damaged)
+            </span>
+            <span class="qp" onclick="quickSend('Refund request for ORD002')">
+              <i class="bi bi-file-earmark-lock2"></i> ORD002 (Digital)
+            </span>
+            <span class="qp" onclick="quickSend('I need refund for ORD003')">
+              <i class="bi bi-bag-x"></i> ORD003 (Used)
+            </span>
+            <span
+              class="qp"
+              onclick="quickSend('Can I get refund for ORD004?')"
+            >
+              <i class="bi bi-truck-flatbed"></i> ORD004 (Lost)
+            </span>
+            <span class="qp" onclick="quickSend('Refund for ORD005 please')">
+              <i class="bi bi-tag"></i> ORD005 (Sale Item)
+            </span>
+          </div>
+        </div>
+
+        <div class="chat-input-wrapper">
+          <div class="chat-input" id="chatInput">
+            <!-- Voice Cancel Button (shown during listening only) -->
+            <button
+              id="voiceCancelBtn"
+              class="voice-cancel-btn"
+              onclick="cancelVoice()"
+              title="Cancel Voice Input"
+              style="display: none"
+            >
+              <i class="bi bi-x-lg"></i>
+            </button>
+
+            <!-- Voice Status/Wave Container -->
+            <div
+              id="voiceStatusContainer"
+              class="voice-status-container"
+              style="display: none"
+            >
+              <!-- Audio wave bars (listening) -->
+              <div class="audio-wave" id="audioWaveBars">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <span id="voiceStatusText">Listening...</span>
+            </div>
+            <textarea
+              id="userInput"
+              placeholder="Speak or type your issue..."
+              rows="1"
+              onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+            ></textarea>
+            <button
+              id="micBtn"
+              class="mic-btn"
+              onclick="toggleVoice()"
+              onmouseenter="
+                if (
+                  !this.classList.contains('listening') &&
+                  !this.classList.contains('speaking')
+                )
+                  document.getElementById('micIcon').className =
+                    'bi bi-mic-fill';
+              "
+              onmouseleave="
+                if (
+                  !this.classList.contains('listening') &&
+                  !this.classList.contains('speaking')
+                )
+                  document.getElementById('micIcon').className = 'bi bi-mic';
+              "
+              title="Click to speak"
+            >
+              <i class="bi bi-mic" id="micIcon"></i>
+            </button>
+            <button onclick="sendMessage()" id="sendBtn">
+              <i class="bi bi-arrow-up"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resizer Drag Bar -->
+      <div class="resizer" id="resizer"></div>
+
+      <!-- Dashboard Panel -->
+      <div class="dashboard-panel">
+        <div class="panel-header" style="justify-content: space-between">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <i class="bi bi-database-fill"></i> CRM Orders Database
+          </div>
+          <div
+            class="header-info-tooltip"
+            onclick="this.classList.toggle('show-tooltip')"
+          >
+            <i class="bi bi-info-circle"></i>
+            <div class="custom-tooltip-content">
+              <i class="bi bi-lightning-charge-fill"></i>
+              <span
+                >Click any customer row to automatically populate the agent
+                simulator chat with a refund request.</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="crm-container">
+          <!-- Stat Metrics Ribbon -->
+          <div class="crm-stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon-wrapper blue">
+                <i class="bi bi-bag-check-fill"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">Total Orders</span>
+                <span class="stat-value" id="statTotalOrders">-</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon-wrapper green">
+                <i class="bi bi-currency-rupee"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">Refunded Total</span>
+                <span class="stat-value" id="statTotalRefunded">-</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon-wrapper orange">
+                <i class="bi bi-shield-fill-exclamation"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">Escalations</span>
+                <span class="stat-value" id="statEscalated">2</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon-wrapper teal">
+                <i class="bi bi-lightning-charge-fill"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">Response SLA</span>
+                <span class="stat-value">99.8%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Controls -->
+          <div class="filter-controls-container">
+            <div class="search-box-wrapper">
+              <i class="bi bi-search"></i>
+              <input
+                type="text"
+                id="crmSearchInput"
+                placeholder="Search by Order ID, name, category..."
+                oninput="handleSearchFilter()"
+              />
+            </div>
+
+            <div class="filter-tabs" id="filterTabs">
+              <div class="tab-indicator" id="tabIndicator"></div>
+              <button
+                class="filter-tab active"
+                data-status="all"
+                onclick="setFilterTab(this)"
+              >
+                All
+              </button>
+              <button
+                class="filter-tab"
+                data-status="delivered"
+                onclick="setFilterTab(this)"
+              >
+                Delivered
+              </button>
+              <button
+                class="filter-tab"
+                data-status="refunded"
+                onclick="setFilterTab(this)"
+              >
+                Refunded
+              </button>
+              <button
+                class="filter-tab"
+                data-status="not delivered"
+                onclick="setFilterTab(this)"
+              >
+                Not Delivered
+              </button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer Details</th>
+                  <th>Tier</th>
+                  <th>Product & Category</th>
+                  <th style="text-align: right">Price</th>
+                  <th style="text-align: center">Status</th>
+                  <th style="text-align: right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody">
+                <tr>
+                  <td
+                    colspan="7"
+                    style="
+                      text-align: center;
+                      color: var(--text-secondary);
+                      padding: 30px;
+                    "
+                  >
+                    <i class="bi bi-arrow-repeat spin"></i> Loading CRM
+                    orders...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div
+      class="sidebar-overlay"
+      id="sidebarOverlay"
+      onclick="toggleAdminSidebar(false)"
+    ></div>
+
+    <!-- Admin Sidebar -->
+    <div class="admin-sidebar" id="adminSidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">
+          <i class="bi bi-diagram-3-fill"></i> Agent Reasoning Steps
+        </div>
+        <button class="close-sidebar-btn" onclick="toggleAdminSidebar(false)">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+      <!-- Tab Selection for Query Steps -->
+      <div class="sidebar-tabs" id="sidebarTabs" style="display: none;"></div>
+      <div class="logs-container" id="adminLogs">
+        <!-- Will be dynamically populated with stepper timeline -->
+      </div>
+    </div>
+
+    <script>
+      const API = window.location.origin.includes("8000")
+        ? ""
+        : "http://localhost:8000";
+      const sessionId = "session_" + Date.now();
+      window.allQueryLogs = [];
+
+      const WELCOME_HTML = `
+        <div class="welcome-dashboard" id="welcomeDashboard">
+          <div class="welcome-header">
+            <div class="welcome-logo-glow">
+              <i class="bi bi-robot"></i>
+            </div>
+            <h3>Refund Shield Assistant</h3>
+            <p>Verify e-commerce return policy eligibility and process instant refunds directly via our automated agent loop.</p>
+          </div>
+          
+          <div class="welcome-grid">
+            <div class="welcome-card">
+              <div class="wc-icon-wrapper">
+                <i class="bi bi-shield-check"></i>
+              </div>
+              <div class="wc-info">
+                <h4>Automated Checks</h4>
+                <p>Auto-validates shipping state, category rules, and refund timelines.</p>
+              </div>
+            </div>
+            
+            <div class="welcome-card">
+              <div class="wc-icon-wrapper">
+                <i class="bi bi-clock-history"></i>
+              </div>
+              <div class="wc-info">
+                <h4>Tier Return Windows</h4>
+                <p>Handles Gold, Platinum, and Standard customer windows (30/45 days).</p>
+              </div>
+            </div>
+            
+            <div class="welcome-card">
+              <div class="wc-icon-wrapper">
+                <i class="bi bi-credit-card-2-front"></i>
+              </div>
+              <div class="wc-info">
+                <h4>Ledger Payouts</h4>
+                <p>Syncs directly with customer financial ledger states in CRM memory.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      let currentFilterStatus = "all";
+      let currentSearchQuery = "";
+      let greetingSent = false;
+      window.allOrders = {};
+
+      // Initialize app on load
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("chatMessages").innerHTML = WELCOME_HTML;
+        resetLogsPlaceholder();
+        fetchOrders();
+
+        setTimeout(updateTabIndicator, 50);
+        window.addEventListener("resize", updateTabIndicator);
+
+        const userInput = document.getElementById("userInput");
+        if (userInput) {
+          userInput.addEventListener("input", adjustInputHeight);
+        }
+      });
+
+      function updateTabIndicator() {
+        const activeTab = document.querySelector(".filter-tab.active");
+        if (activeTab) {
+          const indicator = document.getElementById("tabIndicator");
+          if (indicator) {
+            indicator.style.width = `${activeTab.offsetWidth}px`;
+            indicator.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+          }
+        }
+      }
+
+      function resetLogsPlaceholder() {
+        document.getElementById("adminLogs").innerHTML = `
+          <div style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; margin-top: 80px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+            <i class="bi bi-activity" style="font-size: 2rem; color: var(--border-color);"></i>
+            Reasoning steps will appear here once the agent begins processing a request.
+          </div>
+        `;
+      }
+
+      function toggleAdminSidebar(forceOpen = null) {
+        const sidebar = document.getElementById("adminSidebar");
+        const overlay = document.getElementById("sidebarOverlay");
+
+        const isOpen = sidebar.classList.contains("open");
+        const shouldOpen = forceOpen !== null ? forceOpen : !isOpen;
+
+        if (shouldOpen) {
+          sidebar.classList.add("open");
+          overlay.classList.add("active");
+        } else {
+          sidebar.classList.remove("open");
+          overlay.classList.remove("active");
+        }
+      }
+
+      function quickSend(text) {
+        document.getElementById("userInput").value = text;
+        sendMessage();
+      }
+
+      async function fetchOrders() {
+        try {
+          const res = await fetch(`${API}/orders`);
+          if (!res.ok) throw new Error("Could not fetch orders");
+          const orders = await res.json();
+          window.allOrders = orders;
+          updateKPIs(orders);
+          applyFilters();
+        } catch (e) {
+          console.error("Error fetching orders:", e);
+          document.getElementById("ordersTableBody").innerHTML = `
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--danger-color); padding: 30px;">
+                <i class="bi bi-exclamation-circle-fill"></i> Failed to connect to server. Check if backend is running.
+              </td>
+            </tr>
+          `;
+        }
+      }
+
+      function updateKPIs(orders) {
+        let totalCount = 0;
+        let refundedAmount = 0;
+
+        Object.keys(orders).forEach((key) => {
+          const order = orders[key];
+          totalCount++;
+          if (order.delivery_status === "Refunded") {
+            refundedAmount += order.amount;
+          }
+        });
+
+        animateCounter("statTotalOrders", totalCount);
+        animateCounter("statTotalRefunded", refundedAmount, true);
+      }
+
+      function animateCounter(id, targetVal, isCurrency = false) {
+        const elem = document.getElementById(id);
+        if (!elem) return;
+
+        // Handle initial load / reset case where we just display directly or animate
+        const startVal = parseInt(elem.getAttribute("data-value") || "0");
+        elem.setAttribute("data-value", targetVal);
+
+        if (startVal === targetVal) {
+          if (isCurrency) {
+            elem.textContent = "₹" + targetVal.toLocaleString("en-IN");
+          } else {
+            elem.textContent = targetVal;
+          }
+          return;
+        }
+
+        let current = startVal;
+        const duration = 500; // ms
+        const stepTime = 25;
+        const steps = duration / stepTime;
+        const increment = (targetVal - startVal) / steps;
+
+        let timer = setInterval(() => {
+          current += increment;
+          if (
+            (increment > 0 && current >= targetVal) ||
+            (increment < 0 && current <= targetVal)
+          ) {
+            current = targetVal;
+            clearInterval(timer);
+          }
+
+          if (isCurrency) {
+            elem.textContent =
+              "₹" + Math.round(current).toLocaleString("en-IN");
+          } else {
+            elem.textContent = Math.round(current);
+          }
+        }, stepTime);
+      }
+
+      function setFilterTab(btn) {
+        document
+          .querySelectorAll(".filter-tab")
+          .forEach((tab) => tab.classList.remove("active"));
+        btn.classList.add("active");
+        updateTabIndicator();
+
+        currentFilterStatus = btn.getAttribute("data-status");
+        applyFilters();
+      }
+
+      function handleSearchFilter() {
+        currentSearchQuery = document
+          .getElementById("crmSearchInput")
+          .value.trim()
+          .toLowerCase();
+        applyFilters();
+      }
+
+      function applyFilters() {
+        if (!window.allOrders) return;
+
+        const filteredOrders = {};
+        Object.keys(window.allOrders).forEach((key) => {
+          const order = window.allOrders[key];
+
+          const matchesStatus =
+            currentFilterStatus === "all" ||
+            order.delivery_status.toLowerCase() === currentFilterStatus;
+
+          const matchesSearch =
+            !currentSearchQuery ||
+            order.order_id.toLowerCase().includes(currentSearchQuery) ||
+            order.name.toLowerCase().includes(currentSearchQuery) ||
+            order.product.toLowerCase().includes(currentSearchQuery) ||
+            order.category.toLowerCase().includes(currentSearchQuery);
+
+          if (matchesStatus && matchesSearch) {
+            filteredOrders[key] = order;
+          }
+        });
+
+        renderFilteredOrders(filteredOrders);
+      }
+
+      function renderFilteredOrders(orders) {
+        const tbody = document.getElementById("ordersTableBody");
+        tbody.innerHTML = "";
+
+        const keys = Object.keys(orders).sort();
+        if (keys.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                <i class="bi bi-search" style="font-size: 1.5rem; display: block; margin-bottom: 8px; color: rgba(255,255,255,0.06);"></i>
+                No matching orders found
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        keys.forEach((key) => {
+          const order = orders[key];
+          const tr = document.createElement("tr");
+          tr.className = "clickable-row";
+          tr.onclick = () =>
+            quickSend(`I want a refund for order ${order.order_id}`);
+
+          // Status Badge CSS
+          let statusClass = "delivered";
+          let statusLabel = "Delivered";
+          let statusIcon = "bi-check-circle-fill";
+
+          if (order.delivery_status === "Not Delivered") {
+            statusClass = "not-delivered";
+            statusLabel = "Not Delivered";
+            statusIcon = "bi-exclamation-triangle-fill";
+          } else if (order.delivery_status === "Refunded") {
+            statusClass = "refunded";
+            statusLabel = "Refunded";
+            statusIcon = "bi-arrow-left-right";
+          }
+
+          const tierClass = order.tier.toLowerCase();
+
+          tr.innerHTML = `
+            <td><span class="order-id-badge">${order.order_id}</span></td>
+            <td>
+              <div class="customer-cell">
+                <span class="customer-name">${order.name}</span>
+                <span class="customer-email">${order.email}</span>
+              </div>
+            </td>
+            <td><span class="tier-badge ${tierClass}">${order.tier}</span></td>
+            <td>
+              <div class="customer-cell">
+                <span class="customer-name">${order.product}</span>
+                <span class="customer-email">${order.category}</span>
+              </div>
+            </td>
+            <td style="text-align: right; font-weight: 600;">₹${order.amount.toLocaleString("en-IN")}</td>
+            <td style="text-align: center;">
+              <span class="status-badge ${statusClass}">
+                <i class="bi ${statusIcon}"></i> ${statusLabel}
+              </span>
+            </td>
+            <td style="text-align: right;">
+              <button class="table-action-btn" onclick="event.stopPropagation(); quickSend('I want a refund for order ${order.order_id}')">
+                Refund <i class="bi bi-chevron-right"></i>
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function adjustInputHeight() {
+        const input = document.getElementById("userInput");
+        const chatInput = document.getElementById("chatInput");
+        if (!input || !chatInput) return;
+        input.style.height = "auto";
+        const maxTextareaHeight = 240;
+        const currentScrollHeight = input.scrollHeight;
+        if (currentScrollHeight > maxTextareaHeight) {
+          input.style.height = maxTextareaHeight + "px";
+          input.style.overflowY = "auto";
+        } else {
+          input.style.height = Math.max(currentScrollHeight, 44) + "px";
+          input.style.overflowY = "hidden";
+        }
+
+        if (currentScrollHeight > 45) {
+          chatInput.classList.add("multiline");
+        } else {
+          chatInput.classList.remove("multiline");
+        }
+      }
+
+      function showTyping() {
+        const container = document.getElementById("chatMessages");
+        if (!container) return;
+
+        // Remove welcome dashboard if present
+        const welcome = document.getElementById("welcomeDashboard");
+        if (welcome) {
+          welcome.remove();
+        }
+
+        let typing = document.getElementById("typing");
+        if (!typing) {
+          typing = document.createElement("div");
+          typing.id = "typing";
+          typing.className = "msg-container agent";
+          typing.style.marginTop = "10px";
+          typing.innerHTML = `
+            <div class="msg-avatar-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
+              <div class="msg-avatar" style="margin-top: 0;">
+                <i class="bi bi-robot"></i>
+              </div>
+              <span class="msg-author-below" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">Shield AI</span>
+            </div>
+            <div class="msg-bubble-wrapper">
+              <div class="msg-bubble" style="width: fit-content; padding: 12px 18px; min-width: 60px;">
+                <div style="display: flex; gap: 4px; align-items: center;">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                </div>
+              </div>
+              <div class="msg-actions" style="display: flex; align-items: center; gap: 6px; margin-top: 4px; margin-left: 2px;">
+                <span class="msg-time" style="font-size: 0.72rem; color: var(--text-secondary); opacity: 0.8;">typing...</span>
+              </div>
+            </div>
+          `;
+          container.appendChild(typing);
+        }
+        typing.style.display = "flex";
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function hideTyping() {
+        const typing = document.getElementById("typing");
+        if (typing) {
+          typing.remove();
+        }
+      }
+
+      async function sendMessage(isVoice = false) {
+        const input = document.getElementById("userInput");
+        const text = input.value.trim();
+        if (!text) return;
+
+        if (!greetingSent) {
+          addMessage(
+            "Hello! I am Refund Shield AI. Please provide an Order ID or describe your refund issue, and I will assist you with verifying policy eligibility and processing your refund.",
+            "agent",
+          );
+          greetingSent = true;
+        }
+
+        addMessage(text, "user");
+        input.value = "";
+        adjustInputHeight();
+
+        showTyping();
+
+        try {
+          const res = await fetch(`${API}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text, session_id: sessionId }),
+          });
+          const data = await res.json();
+          hideTyping();
+
+          let orderId = null;
+          if (data.logs && data.logs.length > 0) {
+            const toolCall = data.logs.find(
+              (l) => l.step === "TOOL_CALL" && l.input && (l.input.order_id || l.input.orderId)
+            );
+            if (toolCall) {
+              orderId = toolCall.input.order_id || toolCall.input.orderId;
+            }
+          }
+          if (!orderId) {
+            const match = text.match(/ORD\d+/i);
+            if (match) {
+              orderId = match[0].toUpperCase();
+            }
+          }
+          const logLabel = orderId || "General Chat";
+          const existingIndex = window.allQueryLogs.findIndex(item => item.label === logLabel);
+          const newEntry = {
+            label: logLabel,
+            logs: data.logs || [],
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          if (existingIndex !== -1) {
+            window.allQueryLogs[existingIndex] = newEntry;
+          } else {
+            window.allQueryLogs.push(newEntry);
+          }
+
+          addMessage(data.response, "agent");
+          renderSidebarTabs(logLabel);
+
+          if (isVoice) {
+            speakText(data.response);
+          }
+
+          fetchOrders();
+        } catch (e) {
+          console.error("Chat Error:", e);
+          hideTyping();
+          addMessage(
+            "Connection failed. Please ensure the backend server is running on port 8000.",
+            "system",
+          );
+        }
+      }
+
+      // ─── VOICE PIPELINE (Web Speech API — 100% Free) ───────────────────────
+      let recognition = null;
+      let isListening = false;
+      let isSpeaking = false;
+
+      function initSpeechRecognition() {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          showVoiceToast(
+            "bi-exclamation-triangle-fill",
+            "Voice not supported. Use Chrome or Edge.",
+            3000,
+            true,
+          );
+          return null;
+        }
+        const rec = new SpeechRecognition();
+        rec.lang = "en-IN";
+        rec.interimResults = true;
+        rec.maxAlternatives = 1;
+        rec.continuous = false;
+
+        rec.onstart = () => {
+          isListening = true;
+          setMicState("listening");
+          showVoiceToast("bi-mic-fill", "Listening... speak now");
+        };
+
+        rec.onresult = (event) => {
+          const transcript = Array.from(event.results)
+            .map((r) => r[0].transcript)
+            .join("");
+          document.getElementById("userInput").value = transcript;
+          if (event.results[event.results.length - 1].isFinal) {
+            showVoiceToast("bi-check-circle-fill", "Got it! Sending...");
+          }
+        };
+
+        rec.onerror = (event) => {
+          console.error("Speech recognition error", event.error);
+          const msgs = {
+            "not-allowed": "Microphone access denied. Please allow mic access.",
+            "no-speech": "No speech detected. Try again.",
+            network: "Network error during recognition.",
+          };
+          showVoiceToast(
+            "bi-exclamation-triangle-fill",
+            msgs[event.error] || "Voice error: " + event.error,
+            3000,
+            true,
+          );
+          stopListening();
+        };
+
+        rec.onend = () => {
+          if (isListening) {
+            const text = document.getElementById("userInput").value.trim();
+            if (text) {
+              setTimeout(() => sendMessage(true), 300);
+            }
+          }
+          stopListening();
+        };
+
+        return rec;
+      }
+
+      function toggleVoice() {
+        // Stop TTS if speaking
+        if (isSpeaking) {
+          window.speechSynthesis.cancel();
+          isSpeaking = false;
+        }
+
+        if (isListening) {
+          if (recognition) recognition.stop();
+          stopListening();
+          return;
+        }
+
+        recognition = initSpeechRecognition();
+        if (!recognition) return;
+
+        try {
+          recognition.start();
+        } catch (e) {
+          showVoiceToast(
+            "bi-exclamation-triangle-fill",
+            "Could not start mic: " + e.message,
+            3000,
+            true,
+          );
+        }
+      }
+
+      function stopListening() {
+        isListening = false;
+        setMicState("idle");
+        hideVoiceToast();
+      }
+
+      function setMicState(state) {
+        const btn = document.getElementById("micBtn");
+        const icon = document.getElementById("micIcon");
+        btn.classList.remove("listening", "speaking");
+        if (state === "listening") {
+          btn.classList.add("listening");
+          icon.className = "bi bi-mic-fill";
+          btn.title = "Click to stop";
+        } else if (state === "speaking") {
+          btn.classList.add("speaking");
+          icon.className = "bi bi-volume-up-fill";
+          btn.title = "Click to stop speaking";
+        } else {
+          icon.className = "bi bi-mic";
+        }
+      }
+
+      function speakText(text) {
+        if (!window.speechSynthesis) return;
+        
+        // Strip emojis, markdown, and convert currency symbols to text for natural reading
+        const clean = text
+          .replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '') // Strip emojis
+          .replace(/\*\*(.*?)\*\*/g, '$1') // Strip bold
+          .replace(/\*(.*?)\*/g, '$1')   // Strip italics
+          .replace(/₹/g, ' rupees ')     // Convert Rupee symbol to word
+          .replace(/\(Note:.*?\)/gs, '')  // Strip developer/simulation notes
+          .replace(/\n+/g, '. ')          // Replace newlines with periods for pauses
+          .replace(/\s+/g, ' ')           // Collapse spaces
+          .replace(/\.\s*\./g, '.')       // Prevent double periods
+          .trim();
+
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(clean);
+        utter.lang = 'en-US';
+        utter.rate = 1.0;    // Standard natural speaking rate
+        utter.pitch = 1.0;   // Keep standard pitch to prevent robotic frequency warping
+        utter.volume = 1.0;
+
+        // Pick the best premium natural/neural voices available
+        const voices = window.speechSynthesis.getVoices();
+        const voicePreferences = [
+          // Neural/Cloud voices (Chrome/Edge - best quality)
+          'Google US English',
+          'Google UK English Female',
+          'Google IN English Female',
+          'Microsoft Aria Neural',
+          'Microsoft Jenny Neural',
+          // Premium macOS native voices
+          'Siri',
+          'Samantha',
+          'Karen',
+          'Moira',
+          'Tessa',
+        ];
+
+        let selectedVoice = null;
+        for (const name of voicePreferences) {
+          selectedVoice = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
+          if (selectedVoice) break;
+        }
+
+        // Fallback: find any English female-sounding voice
+        if (!selectedVoice) {
+          const maleNames = ['Daniel', 'Alex', 'Tom', 'Fred', 'Ralph', 'Albert', 'Bruce', 'Junior'];
+          selectedVoice = voices.find(v =>
+            v.lang.startsWith('en') && !maleNames.some(m => v.name.includes(m))
+          );
+        }
+        
+        if (selectedVoice) utter.voice = selectedVoice;
+
+        utter.onstart = () => {
+          isSpeaking = true;
+          setMicState('speaking');
+          setVoiceStateActive(true, 'Agent speaking...', 'speaking');
+        };
+        utter.onend = () => {
+          isSpeaking = false;
+          setMicState('idle');
+          hideVoiceToast();
+        };
+        utter.onerror = () => {
+          isSpeaking = false;
+          setMicState('idle');
+          hideVoiceToast();
+        };
+
+        window.speechSynthesis.speak(utter);
+      }
+
+      function setVoiceStateActive(
+        active,
+        text = "Listening",
+        mode = "listening",
+      ) {
+        const chatInput = document.getElementById("chatInput");
+        const userInput = document.getElementById("userInput");
+        const micBtn = document.getElementById("micBtn");
+        const micIcon = document.getElementById("micIcon");
+        const voiceCancelBtn = document.getElementById("voiceCancelBtn");
+        const voiceStatusContainer = document.getElementById(
+          "voiceStatusContainer",
+        );
+        const voiceStatusText = document.getElementById("voiceStatusText");
+        const audioWaveBars = document.getElementById("audioWaveBars");
+        const sendBtn = document.getElementById("sendBtn");
+        const sendBtnIcon = sendBtn.querySelector("i");
+
+        if (active) {
+          chatInput.classList.add("voice-active");
+          userInput.style.display = "none";
+          voiceStatusContainer.style.display = "flex";
+
+          if (mode === "speaking") {
+            // Agent is speaking — show wave bars + text, hide mic, transform send to pause
+            micBtn.style.setProperty("display", "none", "important");
+            voiceCancelBtn.style.display = "none";
+            audioWaveBars.style.display = "flex";
+            voiceStatusText.style.display = "inline";
+            voiceStatusText.textContent = text;
+            sendBtnIcon.className = "bi bi-stop-fill";
+            sendBtn.onclick = function () {
+              cancelVoice();
+            };
+            sendBtn.title = "Stop Speaking";
+            sendBtn.classList.add("speaking-active");
+          } else {
+            // Mic is listening — show cancel X, wave bars, status text, and red mic button
+            voiceCancelBtn.style.display = "flex";
+            audioWaveBars.style.display = "flex";
+            voiceStatusText.style.display = "inline";
+            voiceStatusText.textContent = text;
+            // Show red pulsing mic button next to send
+            micBtn.style.setProperty("display", "flex", "important");
+            micBtn.classList.add("listening");
+            micIcon.className = "bi bi-mic-fill";
+          }
+        } else {
+          chatInput.classList.remove("voice-active");
+          chatInput.classList.remove("error");
+          userInput.style.display = "block";
+          micBtn.style.setProperty("display", "flex", "important");
+          micBtn.classList.remove("listening");
+          micIcon.className = "bi bi-mic";
+          voiceCancelBtn.style.display = "none";
+          voiceStatusContainer.style.display = "none";
+          audioWaveBars.style.display = "flex";
+          voiceStatusText.style.display = "inline";
+          // Restore send button to default arrow-up
+          sendBtnIcon.className = "bi bi-arrow-up";
+          sendBtn.onclick = function () {
+            sendMessage();
+          };
+          sendBtn.title = "Send Message";
+          sendBtn.classList.remove("speaking-active");
+          userInput.focus();
+          adjustInputHeight();
+        }
+      }
+
+      function cancelVoice() {
+        if (isListening && recognition) {
+          recognition.stop();
+        }
+        if (isSpeaking && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          isSpeaking = false;
+        }
+        stopListening();
+      }
+
+      let voiceToastTimer = null;
+      function showVoiceToast(iconClass, msg, duration = 0, isError = false) {
+        const mode = isSpeaking ? "speaking" : "listening";
+        setVoiceStateActive(true, msg, mode);
+        const chatInput = document.getElementById("chatInput");
+        chatInput.classList.toggle("error", isError);
+
+        if (voiceToastTimer) clearTimeout(voiceToastTimer);
+        if (duration > 0) {
+          voiceToastTimer = setTimeout(hideVoiceToast, duration);
+        }
+      }
+
+      function hideVoiceToast() {
+        setVoiceStateActive(false);
+      }
+
+      // Pre-load voices so they are available immediately
+      window.speechSynthesis.onvoiceschanged = () =>
+        window.speechSynthesis.getVoices();
+
+      function addMessage(text, type, keepDashboard = false) {
+        const container = document.getElementById("chatMessages");
+
+        // Hide welcome dashboard if present
+        if (!keepDashboard) {
+          const welcome = document.getElementById("welcomeDashboard");
+          if (welcome) {
+            welcome.remove();
+          }
+        }
+
+        const div = document.createElement("div");
+        div.className = `msg-container ${type}`;
+
+        let avatarIcon = "bi-person";
+        let authorName = "You";
+        if (type === "agent") {
+          avatarIcon = "bi-robot";
+          authorName = "Shield AI";
+        } else if (type === "system") {
+          avatarIcon = "bi-exclamation-triangle-fill";
+          authorName = "System";
+        }
+
+        let innerContent = "";
+        if (type === "system") {
+          innerContent = `
+            <div class="msg-system-badge">
+              <i class="bi bi-exclamation-triangle-fill"></i> ${text}
+            </div>
+          `;
+        } else {
+          // Format response
+          let formattedText = text;
+          if (type === "agent") {
+            formattedText = text
+              .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+              .replace(/\*(.*?)\*/g, "<em>$1</em>")
+              .replace(/\n/g, "<br>");
+          } else {
+            formattedText = text
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+          }
+
+          if (type === "agent") {
+            innerContent = `
+              <div class="msg-avatar-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
+                <div class="msg-avatar" style="margin-top: 0;">
+                  <i class="bi ${avatarIcon}"></i>
+                </div>
+                <span class="msg-author-below" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">${authorName}</span>
+              </div>
+              <div class="msg-bubble-wrapper">
+                <div class="msg-bubble">${formattedText}</div>
+                <div class="msg-actions" style="display: flex; align-items: center; gap: 6px; margin-top: 4px; margin-left: 2px;">
+                  <span class="msg-time" style="font-size: 0.72rem; color: var(--text-secondary); opacity: 0.8; margin-right: 4px;">
+                    ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <button class="msg-action-btn btn-speak" onclick="speakText(this.dataset.text)" data-text="${text.replace(/"/g, "&quot;").replace(/\n/g, " ")}" title="Read Aloud">
+                    <i class="bi bi-volume-up"></i>
+                  </button>
+                  <button class="msg-action-btn btn-copy" onclick="navigator.clipboard.writeText(this.dataset.text); this.innerHTML='<i class=\\'bi bi-check2\\'></i>'; setTimeout(() => this.innerHTML='<i class=\\'bi bi-clipboard\\'></i>', 2000);" data-text="${text.replace(/"/g, "&quot;")}" title="Copy Text">
+                    <i class="bi bi-clipboard"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          } else {
+            innerContent = `
+              <div class="msg-avatar-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
+                <div class="msg-avatar" style="margin-top: 0;">
+                  <i class="bi ${avatarIcon}"></i>
+                </div>
+                <span class="msg-author-below" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">${authorName}</span>
+              </div>
+              <div class="msg-bubble-wrapper">
+                <div class="msg-bubble">${formattedText}</div>
+                <div class="msg-footer" style="display: flex; justify-content: flex-end; align-items: center; margin-top: 4px; margin-right: 4px;">
+                  <span class="msg-time" style="font-size: 0.72rem; color: var(--text-secondary); opacity: 0.8;">
+                    ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              </div>
+            `;
+          }
+        }
+
+        div.innerHTML = innerContent;
+        container.appendChild(div);
+
+        // Detect approved / denied status cards
+        if (type === "agent") {
+          if (text.includes("APPROVED")) {
+            const amountMatch = text.match(/Amount:\s*₹([\d,]+)/);
+            const timelineMatch = text.match(/Timeline:\s*(.*?)(?:\n|<br>|$)/);
+            const emailMatch = text.match(
+              /Notification Sent to:\s*(.*?)(?:\n|<br>|$)/,
+            );
+            const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+
+            const clean = (val) =>
+              val
+                ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim()
+                : "";
+
+            const amount = amountMatch ? "₹" + clean(amountMatch[1]) : "";
+            const timeline = timelineMatch
+              ? clean(timelineMatch[1])
+              : "5-7 business days";
+            const email = emailMatch ? clean(emailMatch[1]) : "";
+            const orderId = orderIdMatch
+              ? clean(orderIdMatch[1]).toUpperCase()
+              : "";
+
+            const statusCard = document.createElement("div");
+            statusCard.className = "chat-status-card approved";
+
+            statusCard.innerHTML = `
+              <div class="receipt-cut"></div>
+              <div class="receipt-header">
+                <i class="bi bi-check-circle-fill"></i>
+                <div>
+                  <h4>REFUND TRANSACTION APPROVED</h4>
+                  <span>Instant Credit Confirmed</span>
+                </div>
+              </div>
+              <div class="receipt-body">
+                ${orderId ? `<div class="receipt-row"><span class="receipt-label">Order ID</span><span class="receipt-val monospace">${orderId}</span></div>` : ""}
+                ${amount ? `<div class="receipt-row"><span class="receipt-label">Refund Amount</span><span class="receipt-val price-highlight">${amount}</span></div>` : ""}
+                <div class="receipt-row"><span class="receipt-label">Payout Source</span><span class="receipt-val">Store Ledger Credit</span></div>
+                <div class="receipt-row"><span class="receipt-label">ETA Timeline</span><span class="receipt-val success">${timeline}</span></div>
+                ${email ? `<div class="receipt-row"><span class="receipt-label">Ledger Email</span><span class="receipt-val">${email}</span></div>` : ""}
+              </div>
+              <div class="receipt-barcode">
+                <div class="barcode-lines"></div>
+                <span class="barcode-num">TX-${orderId || "MOCK"}-${Math.floor(Math.random() * 900000 + 100000)}</span>
+              </div>
+            `;
+
+            div.querySelector(".msg-bubble-wrapper").appendChild(statusCard);
+          } else if (text.includes("denied") || text.includes("DENIED")) {
+            const reasonMatch = text.match(/Reason:\s*(.*?)(?:\n|<br>|$)/i);
+            const orderIdMatch = text.match(/order\s*(ORD\d+)/i);
+
+            const clean = (val) =>
+              val
+                ? val.replace(/^[\*\_\:\s\(\)]+|[\*\_\:\s\(\)]+$/g, "").trim()
+                : "";
+
+            const reason = reasonMatch
+              ? clean(reasonMatch[1])
+              : "Ineligible under e-commerce refund criteria";
+            const orderId = orderIdMatch
+              ? clean(orderIdMatch[1]).toUpperCase()
+              : "";
+
+            const statusCard = document.createElement("div");
+            statusCard.className = "chat-status-card denied";
+
+            statusCard.innerHTML = `
+              <div class="denied-header">
+                <i class="bi bi-shield-slash-fill"></i>
+                <div>
+                  <h4>REFUND VALIDATION FAILED</h4>
+                  <span>Ineligible Return Request</span>
+                </div>
+              </div>
+              <div class="receipt-body">
+                ${orderId ? `<div class="receipt-row"><span class="receipt-label">Order Reference</span><span class="receipt-val monospace">${orderId}</span></div>` : ""}
+                <div class="receipt-row" style="flex-direction: column; align-items: flex-start; gap: 6px; border-bottom: none; padding-bottom: 0;">
+                  <span class="receipt-label">Violation Trigger Description</span>
+                  <div class="violation-badge">
+                    <i class="bi bi-exclamation-octagon"></i> ${reason}
+                  </div>
+                </div>
+                <div class="receipt-row" style="margin-top: 8px;"><span class="receipt-label">Resolution Status</span><span class="receipt-val error">Declined</span></div>
+              </div>
+              <div class="denied-escalation">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>Order ledger status remains Delivered. If client escalates, trigger human takeover overrides.</span>
+              </div>
+            `;
+
+            div.querySelector(".msg-bubble-wrapper").appendChild(statusCard);
+          }
+        }
+
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function renderLogs(logs) {
+        const container = document.getElementById("adminLogs");
+        container.innerHTML = "";
+
+        if (!logs || logs.length === 0) {
+          resetLogsPlaceholder();
+          return;
+        }
+
+        const timeline = document.createElement("div");
+        timeline.className = "timeline-wrapper";
+
+        const line = document.createElement("div");
+        line.className = "timeline-line";
+        timeline.appendChild(line);
+
+        logs.forEach((log, index) => {
+          const node = document.createElement("div");
+          node.className = `timeline-node ${log.step.toLowerCase()}`;
+
+          let stepTitle = "";
+          let stepSummary = "";
+          let stepIcon = "";
+          let payload = null;
+
+          switch (log.step) {
+            case "USER_INPUT":
+              stepTitle = "User Query Received";
+              stepSummary = `"${log.content}"`;
+              stepIcon = "bi-chat-left-dots-fill";
+              break;
+            case "TOOL_CALL":
+              stepTitle = `Invoking Tool`;
+              stepSummary = `Executing capability: <strong><code>${log.tool}</code></strong>`;
+              stepIcon = "bi-wrench-adjustable";
+              payload = log.input;
+              break;
+            case "TOOL_RESULT":
+              stepTitle = `Tool Output Received`;
+              stepSummary = `Capability <code>${log.tool}</code> returned parameters`;
+              stepIcon = "bi-database-check";
+              payload = log.result;
+              break;
+            case "AGENT_RESPONSE":
+              stepTitle = "Agent Reasoning Step";
+              stepSummary = `Claude evaluated constraints. Stop status: <strong>${log.stop_reason || "tool_use"}</strong>`;
+              stepIcon = "bi-cpu-fill";
+              payload = log;
+              break;
+            case "FINAL_ANSWER":
+              stepTitle = "Final Agent Decision";
+              stepSummary =
+                "Decision completed. Formulation sent to chat stream.";
+              stepIcon = "bi-shield-fill-check";
+              break;
+            default:
+              stepTitle = log.step;
+              stepSummary = "System telemetry event.";
+              stepIcon = "bi-activity";
+              payload = log;
+          }
+
+          const detailsHtml = payload
+            ? `
+            <details class="node-details">
+              <summary><i class="bi bi-code-slash"></i> View payload JSON</summary>
+              <div class="node-pre-wrapper">
+                <pre><code>${JSON.stringify(payload, null, 2)}</code></pre>
+              </div>
+            </details>
+          `
+            : "";
+
+          node.innerHTML = `
+            <div class="node-marker">
+              <i class="bi ${stepIcon}"></i>
+            </div>
+            <div class="node-content-card">
+              <div class="node-header">
+                <span class="node-title">${stepTitle}</span>
+                <span class="node-index">#${index + 1}</span>
+              </div>
+              <div class="node-summary">${stepSummary}</div>
+              ${detailsHtml}
+            </div>
+          `;
+
+          timeline.appendChild(node);
+        });
+
+        container.appendChild(timeline);
+
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+
+      function renderSidebarTabs(activeLabel) {
+        const tabsContainer = document.getElementById("sidebarTabs");
+        if (!tabsContainer) return;
+
+        // Add count to header title
+        const sidebarTitle = document.querySelector(".sidebar-title");
+        if (sidebarTitle) {
+          const count = window.allQueryLogs.length;
+          sidebarTitle.innerHTML = `<i class="bi bi-diagram-3-fill"></i> Reasoning Steps ${count > 0 ? `(${count})` : ""}`;
+        }
+
+        if (!window.allQueryLogs || window.allQueryLogs.length === 0) {
+          tabsContainer.style.display = "none";
+          tabsContainer.innerHTML = "";
+          return;
+        }
+
+        tabsContainer.style.display = "flex";
+        tabsContainer.innerHTML = "";
+
+        if (window.allQueryLogs.length <= 4) {
+          // Pills mode
+          tabsContainer.classList.remove("dropdown-mode");
+          window.allQueryLogs.forEach(entry => {
+            const tab = document.createElement("div");
+            tab.className = `sidebar-tab ${entry.label === activeLabel ? "active" : ""}`;
+            
+            let icon = "bi-file-earmark-text-fill";
+            if (entry.label.startsWith("ORD")) {
+              icon = "bi-box-seam-fill";
+            } else {
+              icon = "bi-chat-dots-fill";
+            }
+            
+            tab.innerHTML = `<i class="bi ${icon}"></i> ${entry.label}`;
+            tab.onclick = () => {
+              document.querySelectorAll(".sidebar-tab").forEach(t => t.classList.remove("active"));
+              tab.classList.add("active");
+              renderLogs(entry.logs);
+            };
+            tabsContainer.appendChild(tab);
+          });
+        } else {
+          // Dropdown mode for > 4 items
+          tabsContainer.classList.add("dropdown-mode");
+          
+          const dropdownDiv = document.createElement("div");
+          dropdownDiv.className = "custom-dropdown";
+          
+          const activeEntry = window.allQueryLogs.find(entry => entry.label === activeLabel) || window.allQueryLogs[window.allQueryLogs.length - 1];
+          let activeIcon = activeEntry.label.startsWith("ORD") ? "bi-box-seam-fill" : "bi-chat-dots-fill";
+          
+          const trigger = document.createElement("button");
+          trigger.className = "dropdown-trigger";
+          trigger.innerHTML = `
+            <span><i class="bi ${activeIcon}"></i> ${activeEntry.label} (${activeEntry.timestamp})</span>
+            <i class="bi bi-chevron-down trigger-arrow"></i>
+          `;
+          
+          const menu = document.createElement("div");
+          menu.className = "dropdown-menu";
+          menu.id = "customDropdownMenu";
+          
+          // Search input wrapper
+          const searchWrapper = document.createElement("div");
+          searchWrapper.className = "dropdown-search-wrapper";
+          searchWrapper.innerHTML = `
+            <i class="bi bi-search"></i>
+            <input type="text" class="dropdown-search-input" placeholder="Search order references..." autocomplete="off">
+          `;
+          
+          const optionsList = document.createElement("div");
+          optionsList.className = "dropdown-options";
+          
+          // Populate list items
+          function populateOptions(filterText = "") {
+            optionsList.innerHTML = "";
+            const filtered = window.allQueryLogs.filter(entry => 
+              entry.label.toLowerCase().includes(filterText.toLowerCase())
+            );
+            
+            if (filtered.length === 0) {
+              const noResults = document.createElement("div");
+              noResults.style.padding = "12px";
+              noResults.style.fontSize = "0.78rem";
+              noResults.style.color = "var(--text-secondary)";
+              noResults.style.textAlign = "center";
+              noResults.textContent = "No matching orders found";
+              optionsList.appendChild(noResults);
+              return;
+            }
+            
+            filtered.forEach(entry => {
+              const option = document.createElement("div");
+              option.className = `dropdown-option ${entry.label === activeLabel ? "active" : ""}`;
+              
+              let optIcon = entry.label.startsWith("ORD") ? "bi-box-seam-fill" : "bi-chat-dots-fill";
+              
+              option.innerHTML = `
+                <div class="dropdown-option-left">
+                  <i class="bi ${optIcon}"></i>
+                  <span>${entry.label}</span>
+                </div>
+                <span class="dropdown-option-time">${entry.timestamp}</span>
+              `;
+              
+              option.onclick = () => {
+                menu.classList.remove("show");
+                trigger.classList.remove("open");
+                renderSidebarTabs(entry.label);
+              };
+              
+              optionsList.appendChild(option);
+            });
+          }
+          
+          // Handle typing filter
+          const searchInput = searchWrapper.querySelector(".dropdown-search-input");
+          searchInput.addEventListener("input", (e) => {
+            populateOptions(e.target.value);
+          });
+          
+          trigger.onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = menu.classList.contains("show");
+            
+            // Close all other dropdowns if any
+            document.querySelectorAll(".dropdown-menu").forEach(m => m.classList.remove("show"));
+            document.querySelectorAll(".dropdown-trigger").forEach(t => t.classList.remove("open"));
+            
+            if (!isOpen) {
+              menu.classList.add("show");
+              trigger.classList.add("open");
+              searchInput.value = "";
+              populateOptions("");
+              setTimeout(() => searchInput.focus(), 50);
+            }
+          };
+          
+          // Click outside to close dropdown
+          document.addEventListener("click", function closeMenu(event) {
+            if (!dropdownDiv.contains(event.target)) {
+              menu.classList.remove("show");
+              trigger.classList.remove("open");
+              document.removeEventListener("click", closeMenu);
+            }
+          });
+          
+          dropdownDiv.appendChild(trigger);
+          menu.appendChild(searchWrapper);
+          menu.appendChild(optionsList);
+          dropdownDiv.appendChild(menu);
+          tabsContainer.appendChild(dropdownDiv);
+        }
+
+        const activeEntry = window.allQueryLogs.find(entry => entry.label === activeLabel);
+        if (activeEntry) {
+          renderLogs(activeEntry.logs);
+        }
+      }
+
+      async function resetChat() {
+        try {
+          await fetch(`${API}/reset`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId }),
+          });
+        } catch (e) {
+          console.error("Failed to reset session on server:", e);
+        }
+
+        window.allQueryLogs = [];
+        renderSidebarTabs();
+
+        document.getElementById("chatMessages").innerHTML = WELCOME_HTML;
+        resetLogsPlaceholder();
+        greetingSent = false;
+
+        // Reset Search Input & Tab Filter states
+        document.getElementById("crmSearchInput").value = "";
+        currentSearchQuery = "";
+        currentFilterStatus = "all";
+        document.querySelectorAll(".filter-tab").forEach((tab) => {
+          tab.classList.remove("active");
+          if (tab.getAttribute("data-status") === "all") {
+            tab.classList.add("active");
+          }
+        });
+        updateTabIndicator();
+
+        toggleAdminSidebar(false);
+        fetchOrders();
+      }
+
+      // Resizable Panel Logic
+      const chatPanel = document.getElementById("chatPanel");
+      const resizer = document.getElementById("resizer");
+
+      resizer.addEventListener("mousedown", initResize);
+
+      function initResize(e) {
+        e.preventDefault();
+        resizer.classList.add("active");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+
+        const startWidth = chatPanel.getBoundingClientRect().width;
+        const startX = e.clientX;
+
+        function doResize(moveEvent) {
+          const dx = moveEvent.clientX - startX;
+          const newWidth = startWidth + dx;
+
+          if (newWidth > 320 && newWidth < window.innerWidth - 320) {
+            chatPanel.style.width = `${newWidth}px`;
+            updateTabIndicator();
+          }
+        }
+
+        function stopResize() {
+          resizer.classList.remove("active");
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          window.removeEventListener("mousemove", doResize);
+          window.removeEventListener("mouseup", stopResize);
+        }
+
+        window.addEventListener("mousemove", doResize);
+        window.addEventListener("mouseup", stopResize);
+      }
+    </script>
+  </body>
+</html>
