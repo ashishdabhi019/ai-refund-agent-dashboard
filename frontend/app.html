@@ -55,13 +55,11 @@
 
 
         <div class="quick-prompts-wrapper">
-          <div class="qp-title" style="cursor: pointer; justify-content: space-between; user-select: none;" onclick="toggleQuickPrompts()">
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <i class="bi bi-lightning-charge-fill"></i> Quick Test Scenarios
-            </div>
-            <i class="bi bi-chevron-up" id="qpToggleIcon" style="transition: transform 0.3s ease;"></i>
+          <div class="qp-title" style="cursor: pointer; user-select: none;" onclick="toggleQuickPrompts()">
+            <i class="bi bi-lightning-charge-fill"></i> Quick Test Scenarios
+            <i class="bi bi-chevron-down" id="qpToggleIcon" style="transition: transform 0.3s ease; font-size: 0.8rem; margin-left: 2px;"></i>
           </div>
-          <div class="quick-prompts" id="quickPromptsContainer">
+          <div class="quick-prompts" id="quickPromptsContainer" style="display: none;">
             <span class="qp qp-approve" onclick="quickSend('I want a refund for order ORD001')">
               <i class="bi bi-shield-check"></i>
               <span class="qp-id">ORD001</span>
@@ -524,10 +522,10 @@
         const icon = document.getElementById("qpToggleIcon");
         if (container.style.display === "none") {
           container.style.display = "flex";
-          icon.style.transform = "rotate(0deg)";
+          icon.style.transform = "rotate(180deg)";
         } else {
           container.style.display = "none";
-          icon.style.transform = "rotate(180deg)";
+          icon.style.transform = "rotate(0deg)";
         }
       }
 
