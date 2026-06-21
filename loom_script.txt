@@ -1,0 +1,119 @@
+Refund Shield AI - 7-10 Minute Loom Video Demo Script
+
+=======================================================
+PREPARATION BEFORE RECORDING
+=======================================================
+1. Open your browser to http://localhost:3000/app.html
+2. Ensure both the backend and frontend are running (`npm run dev`)
+3. Have your IDE (VS Code/Cursor) open to the project directory in the background.
+4. Have your GitHub repository URL ready in another tab.
+5. Take a deep breath! You've got this. 
+
+=======================================================
+VIDEO SCRIPT & WALKTHROUGH (7-10 Minutes)
+=======================================================
+
+-------------------------------------------------------
+PART 1: Introduction (0:00 - 1:00)
+-------------------------------------------------------
+[Screen: Dashboard UI - http://localhost:3000/app.html]
+
+"Hi team at Workpodd, my name is Ashish, and I'm excited to present my submission for the AI Customer Support Agent challenge. 
+
+I've built 'Refund Shield AI', a fully functional web application that processes e-commerce refunds using an LLM to enforce strict policy rules. 
+
+As you can see on the dashboard, we have:
+- On the left: The customer-facing chat interface where the agent interacts with users.
+- On the right: The Admin CRM Database pre-loaded with 30 diverse customer profiles.
+- Top Header: A Live LLM badge showing we are actively using Llama 3.3 70B, and a Refund Policy modal that outlines the strict rules."
+
+-------------------------------------------------------
+PART 2: Live Demo - Standard Refund (1:00 - 2:30)
+-------------------------------------------------------
+[Screen: Dashboard UI]
+
+"Let's start with a standard 'happy path' refund."
+*Action: Click the Quick Test Scenario pill for "ORD001 Damaged"*
+*Action: Wait for the agent to process and generate the Approved receipt card.*
+
+"Here, the customer requested a refund for order ORD001. The agent successfully processed it and generated an approval receipt. 
+
+If you look at the CRM Database on the right, you'll see that order ORD001 has instantly updated its status to 'Refunded' in real-time."
+
+*Action: Click the "Reasoning Logs" button in the top right header to open the sidebar*
+
+"If we open the Reasoning Logs sidebar, we can see exactly how the agent handled this. It followed a strict sequence:
+1. Called `lookup_order` to verify the order exists.
+2. Called `check_refund_eligibility` to validate the policy rules (it saw the item was damaged and within the 45-day Gold tier window).
+3. Called `approve_refund` to finalize it.
+4. Sent the final response to the customer."
+
+-------------------------------------------------------
+PART 3: Live Demo - Policy Violation / Holding the Line (2:30 - 4:00)
+-------------------------------------------------------
+[Screen: Dashboard UI]
+
+"Now let's see how the agent handles an edge case where it must 'hold the line' and enforce the policy."
+*Action: Click the Quick Test Scenario pill for "ORD002 Digital"*
+*Action: Wait for the agent to process and deny the refund.*
+
+"The customer is asking for a refund on ORD002, which is a Python Course (a digital product). As you can see, the agent respectfully denied the refund and cited the exact policy rule stating that digital products are not eligible. 
+
+Let's test one more edge case."
+*Action: Click the Quick Test Scenario pill for "ORD008 90-day Limit"*
+
+"Here is a complex edge case: a 90-day cooling period. The agent checks the CRM, sees the customer had another refund within the last 90 days, and strictly denies the request based on the abuse-prevention policy. It cannot be tricked into bypassing these rules."
+
+-------------------------------------------------------
+PART 4: Live Demo - Voice Pipeline (4:00 - 5:00)
+-------------------------------------------------------
+[Screen: Dashboard UI]
+
+"I've also implemented a voice pipeline for a more interactive experience."
+*Action: Click the microphone icon in the chat input bar.*
+*Action: Speak clearly into your mic: "Hi, I need a refund for order ORD006."*
+*Action: Wait for the agent to process and speak the response out loud.*
+
+"The application uses the browser's native Web Speech API for both Speech-to-Text and Text-to-Speech, creating a seamless, hands-free customer support experience. You can see the visual wave animation while it listens and speaks."
+
+-------------------------------------------------------
+PART 5: Code Tour & Architecture (5:00 - 7:30)
+-------------------------------------------------------
+[Screen: Switch to your IDE (VS Code / Cursor)]
+
+"Let's look under the hood at the repository architecture. The app is split into a Vanilla HTML/JS frontend and a FastAPI Python backend."
+
+1. Agent Loop & Tool Orchestration:
+*Action: Open `backend/agent.py` and `backend/tools.py`*
+"In `agent.py`, I've implemented a raw function-calling agent loop. The agent is forced to use tools deterministically. It cannot blindly approve a refund.
+In `tools.py`, you can see the `check_refund_eligibility` tool. I've moved the policy enforcement into code rather than relying entirely on the LLM's prompt. This ensures 100% deterministic policy enforcement. The LLM simply orchestrates the data gathering."
+
+2. Voice Stream Handling:
+*Action: Open `frontend/app.html` and scroll to the `startVoiceRecognition()` and `speakText()` functions (around line 1400)*
+"On the frontend, the voice stream is handled via the native `webkitSpeechRecognition` API. When the user finishes speaking, the transcript is sent to the `/chat` endpoint. When the response returns, `window.speechSynthesis` reads the text back using a neural voice."
+
+3. CRM & Policy Data:
+*Action: Show `backend/crm_data.py` and `backend/refund_policy.py`*
+"Here is the mock CRM database with 30 diverse profiles, and the structured strict refund policy document."
+
+-------------------------------------------------------
+PART 6: Reasoning Logs & Failure Handling (7:30 - 8:30)
+-------------------------------------------------------
+[Screen: Back to Dashboard UI, Reasoning Logs Sidebar open]
+
+"Returning to the Reasoning Logs sidebar. This admin panel acts as our terminal trace. 
+If the LLM hallucinates a tool call, or misses a required parameter, the backend catches the error, wraps it in a TOOL_RESULT error message, and feeds it back into the loop."
+
+*Action: In the IDE, briefly show `agent.py`'s try/except block around tool execution.*
+"The loop has a `max_iterations` safeguard to prevent infinite loops. If it hits an error, the agent sees the error string and attempts a retry, ensuring robustness."
+
+-------------------------------------------------------
+PART 7: Conclusion & Wrap Up (8:30 - 9:00)
+-------------------------------------------------------
+[Screen: Show your GitHub Repository page]
+
+"To wrap up, you can find all the code, along with a clean, comprehensive README file detailing the setup, at my public GitHub repository here.
+
+Thank you for the opportunity to build this, I had a lot of fun with the challenge. I'm looking forward to your feedback and hope to speak with you in the conversational interview!"
+
+[End Recording]
