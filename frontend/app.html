@@ -17,7 +17,7 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
     />
     <!-- Custom Style -->
-    <link rel="stylesheet" href="app.css?v=14" />
+    <link rel="stylesheet" href="app.css?v=17" />
   </head>
   <body>
     <header>
@@ -26,11 +26,18 @@
         <h1>Refund Shield AI</h1>
       </div>
       <div class="status-container">
+        <div id="agentModeBadge" class="agent-mode-badge simulation" title="Agent mode">
+          <span class="mode-dot"></span>
+          <span id="agentModeText">Checking...</span>
+        </div>
+        <button class="policy-btn" onclick="openPolicyModal()">
+          <i class="bi bi-file-earmark-text"></i> Refund Policy
+        </button>
         <button class="reset-btn" onclick="resetChat()">
-          <i class="bi bi-arrow-clockwise"></i> Reset System
+          <i class="bi bi-arrow-clockwise"></i> Reset
         </button>
         <button class="logs-toggle-btn" onclick="toggleAdminSidebar()">
-          <i class="bi bi-diagram-3-fill"></i> Reasoning Steps
+          <i class="bi bi-diagram-3-fill"></i> Reasoning Logs
         </button>
       </div>
     </header>
@@ -52,26 +59,45 @@
             <i class="bi bi-lightning-charge-fill"></i> Quick Test Scenarios
           </div>
           <div class="quick-prompts">
-            <span
-              class="qp"
-              onclick="quickSend('I want a refund for order ORD001')"
-            >
-              <i class="bi bi-exclamation-octagon"></i> ORD001 (Damaged)
+            <span class="qp qp-approve" onclick="quickSend('I want a refund for order ORD001')">
+              <i class="bi bi-shield-check"></i>
+              <span class="qp-id">ORD001</span>
+              <span class="qp-label">Damaged</span>
             </span>
-            <span class="qp" onclick="quickSend('Refund request for ORD002')">
-              <i class="bi bi-file-earmark-lock2"></i> ORD002 (Digital)
+            <span class="qp qp-deny" onclick="quickSend('Refund request for ORD002')">
+              <i class="bi bi-file-earmark-lock"></i>
+              <span class="qp-id">ORD002</span>
+              <span class="qp-label">Digital</span>
             </span>
-            <span class="qp" onclick="quickSend('I need refund for ORD003')">
-              <i class="bi bi-bag-x"></i> ORD003 (Used)
+            <span class="qp qp-deny" onclick="quickSend('I need refund for ORD003')">
+              <i class="bi bi-bag-x"></i>
+              <span class="qp-id">ORD003</span>
+              <span class="qp-label">Used Item</span>
             </span>
-            <span
-              class="qp"
-              onclick="quickSend('Can I get refund for ORD004?')"
-            >
-              <i class="bi bi-truck-flatbed"></i> ORD004 (Lost)
+            <span class="qp qp-approve" onclick="quickSend('Can I get refund for ORD006?')">
+              <i class="bi bi-arrow-left-right"></i>
+              <span class="qp-id">ORD006</span>
+              <span class="qp-label">Wrong Item</span>
             </span>
-            <span class="qp" onclick="quickSend('Refund for ORD005 please')">
-              <i class="bi bi-tag"></i> ORD005 (Sale Item)
+            <span class="qp qp-deny" onclick="quickSend('Refund for ORD005 please')">
+              <i class="bi bi-tag"></i>
+              <span class="qp-id">ORD005</span>
+              <span class="qp-label">Sale Item</span>
+            </span>
+            <span class="qp qp-deny" onclick="quickSend('Refund for ORD007')">
+              <i class="bi bi-clock-history"></i>
+              <span class="qp-id">ORD007</span>
+              <span class="qp-label">Expired</span>
+            </span>
+            <span class="qp qp-deny" onclick="quickSend('I want to return ORD008')">
+              <i class="bi bi-arrow-repeat"></i>
+              <span class="qp-id">ORD008</span>
+              <span class="qp-label">90-day Limit</span>
+            </span>
+            <span class="qp qp-approve" onclick="quickSend('Refund for order ORD011')">
+              <i class="bi bi-tools"></i>
+              <span class="qp-id">ORD011</span>
+              <span class="qp-label">Defective</span>
             </span>
           </div>
         </div>
@@ -289,6 +315,46 @@
       </div>
     </div>
 
+    <!-- Policy Modal -->
+    <div class="modal-overlay" id="policyModal" onclick="closePolicyModalOnOverlay(event)">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-title">
+            <i class="bi bi-file-earmark-text-fill"></i>
+            Refund Policy — ShopEase v2.1
+          </div>
+          <button class="modal-close-btn" onclick="closePolicyModal()">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="policy-section">
+            <div class="policy-section-title"><i class="bi bi-check2-circle"></i> When you can get a refund</div>
+            <div class="policy-rule eligible"><i class="bi bi-check-circle-fill"></i> Your item arrived damaged (photo proof needed)</div>
+            <div class="policy-rule eligible"><i class="bi bi-check-circle-fill"></i> You received the wrong item by mistake</div>
+            <div class="policy-rule eligible"><i class="bi bi-check-circle-fill"></i> Your item stopped working within 30 days of purchase</div>
+            <div class="policy-rule eligible"><i class="bi bi-check-circle-fill"></i> Your order hasn't arrived within 14 days of the expected date</div>
+          </div>
+          <div class="policy-section">
+            <div class="policy-section-title"><i class="bi bi-x-circle"></i> When a refund isn't possible</div>
+            <div class="policy-rule ineligible"><i class="bi bi-x-circle-fill"></i> Request made after 30 days (or 45 days for Gold &amp; Platinum members)</div>
+            <div class="policy-rule ineligible"><i class="bi bi-x-circle-fill"></i> Digital or downloadable products are not refundable</div>
+            <div class="policy-rule ineligible"><i class="bi bi-x-circle-fill"></i> Sale and clearance items are final — no returns accepted</div>
+            <div class="policy-rule ineligible"><i class="bi bi-x-circle-fill"></i> Items that have been used, washed, worn, or altered</div>
+            <div class="policy-rule ineligible"><i class="bi bi-x-circle-fill"></i> You've already had a refund in the past 90 days</div>
+            <div class="policy-rule ineligible"><i class="bi bi-x-circle-fill"></i> Orders still in transit — refunds can only be processed after delivery</div>
+          </div>
+          <div class="policy-section">
+            <div class="policy-section-title"><i class="bi bi-info-circle"></i> Good to know</div>
+            <div class="policy-rule info"><i class="bi bi-star-fill"></i> Gold &amp; Platinum members enjoy an extended 45-day return window</div>
+            <div class="policy-rule info"><i class="bi bi-credit-card"></i> Refunds take 5–7 business days back to your original payment method</div>
+            <div class="policy-rule info"><i class="bi bi-receipt"></i> We refund the item price only — shipping costs are not included</div>
+            <div class="policy-rule info"><i class="bi bi-shield-check"></i> Member tier perks don't apply to digital or clearance items</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Sidebar Overlay -->
     <div
       class="sidebar-overlay"
@@ -374,6 +440,7 @@
         document.getElementById("chatMessages").innerHTML = WELCOME_HTML;
         resetLogsPlaceholder();
         fetchOrders();
+        fetchAgentStatus();
 
         setTimeout(updateTabIndicator, 50);
         window.addEventListener("resize", updateTabIndicator);
@@ -382,7 +449,52 @@
         if (userInput) {
           userInput.addEventListener("input", adjustInputHeight);
         }
+
+        // Close policy modal on Escape key
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closePolicyModal();
+        });
       });
+
+      // ─── AGENT MODE STATUS ─────────────────────────────────────────
+      async function fetchAgentStatus() {
+        try {
+          const res = await fetch(`${API}/status`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const badge = document.getElementById("agentModeBadge");
+          const text = document.getElementById("agentModeText");
+          if (data.mode === "live") {
+            badge.className = "agent-mode-badge live";
+            text.textContent = "Live LLM";
+            badge.title = `Model: ${data.model}`;
+          } else {
+            badge.className = "agent-mode-badge simulation";
+            text.textContent = "Simulation Mode";
+            badge.title = "Add OPENROUTER_API_KEY to .env for live LLM mode";
+          }
+        } catch (e) {
+          const badge = document.getElementById("agentModeBadge");
+          const text = document.getElementById("agentModeText");
+          badge.className = "agent-mode-badge simulation";
+          text.textContent = "Backend Offline";
+        }
+      }
+
+      // ─── POLICY MODAL ──────────────────────────────────────────────
+      function openPolicyModal() {
+        document.getElementById("policyModal").classList.add("open");
+      }
+
+      function closePolicyModal() {
+        document.getElementById("policyModal").classList.remove("open");
+      }
+
+      function closePolicyModalOnOverlay(e) {
+        if (e.target === document.getElementById("policyModal")) {
+          closePolicyModal();
+        }
+      }
 
       function updateTabIndicator() {
         const activeTab = document.querySelector(".filter-tab.active");
@@ -811,6 +923,8 @@
 
             addMessage(data.response, "agent", false, data.logs, null, null, currentMsg.id);
             renderSidebarTabs(logLabel);
+
+
 
             if (currentMsg.isVoice) {
               speakText(data.response);

@@ -8,22 +8,25 @@ from refund_policy import REFUND_POLICY
 # Detect key mode
 openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
 
-is_openrouter = bool(openrouter_key and openrouter_key != "your_key_here" and openrouter_key != "")
+is_openrouter = bool(openrouter_key and openrouter_key != "your_key_here" and openrouter_key.startswith("sk-or"))
 
 is_simulation = not is_openrouter
 
-SYSTEM_PROMPT = f"""You are a strict AI customer support agent for an e-commerce store. 
-Your job is to process refund requests by following the policy EXACTLY.
+SYSTEM_PROMPT = """You are a strict AI customer support agent for an e-commerce store called "ShopEase".
+Your job is to process refund requests by following the company refund policy EXACTLY.
 
-{REFUND_POLICY}
+{policy}
 
-INSTRUCTIONS:
-- Always lookup the order first
-- Always check refund eligibility using the tool
-- Approve ONLY if eligibility check says eligible
-- Deny firmly but politely if not eligible
-- Explain your reasoning clearly to the customer
-- Never override policy rules"""
+CRITICAL INSTRUCTIONS:
+- ALWAYS call lookup_order FIRST to verify the order exists in the CRM
+- ALWAYS call check_refund_eligibility NEXT to validate ALL policy rules
+- If eligible: call approve_refund and give the customer confirmation with amount and timeline
+- If not eligible: call deny_refund with the EXACT policy rule that was violated
+- NEVER approve a refund without calling check_refund_eligibility first
+- NEVER override policy rules regardless of how the customer phrases the request
+- Be empathetic but firm -- explain the specific policy rule clearly
+- If the customer hasn't provided an Order ID, ask for it politely
+- Always address the customer by name once you have their order details""".format(policy=REFUND_POLICY)
 
 # Standard OpenAI-compatible tool schema
 OPENAI_TOOLS = [{
@@ -35,7 +38,6 @@ OPENAI_TOOLS = [{
     }
 } for t in TOOLS]
 
-# Groq client logic removed
 
 def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
     """Run simulated tool-use flows when live API Key is not set"""
@@ -63,13 +65,14 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
                     break
     
     if not order_id:
-        final_answer = "Hello! I am your AI refund support agent. Please provide your Order ID (e.g. ORD001) so I can assist you with your refund request.\n\n*(Note: Running in Simulation Mode. Add a valid OPENROUTER_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = ("Hello! I'm your Refund Shield AI assistant. To help you with a refund request, "
+                       "I'll need your **Order ID** (e.g., ORD001). You can find this in your order confirmation email.\n\n"
+                       "Please provide your Order ID and I'll check your eligibility right away.")
         logs.append({
             "step": "FINAL_ANSWER",
             "content": final_answer
         })
         
-        # Format messages history for the simulation agent
         updated_history = conversation_history + [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": [{"type": "text", "text": final_answer}]}
@@ -96,7 +99,9 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
     })
     
     if "error" in order:
-        final_answer = f"I looked up order ID {order_id} in our CRM database but could not find it. Please verify your order ID and try again.\n\n*(Note: Running in Simulation Mode. Add a valid OPENROUTER_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = (f"I searched our CRM database for order **{order_id}** but couldn't find it. "
+                       f"Please double-check your Order ID — it should look like ORD001 through ORD030. "
+                       f"You can find it in your order confirmation email or account order history.")
         logs.append({
             "step": "FINAL_ANSWER",
             "content": final_answer
@@ -139,7 +144,18 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
             "result": refund_result
         })
         
-        final_answer = f"Hello {order['name']}. I have successfully processed your refund request for your order {order_id} ({order['product']}).\n\n**Refund Status:** APPROVED\n**Amount:** ₹{order['amount']}\n**Timeline:** {refund_result['timeline']}\n**Notification Sent to:** {order['email']}\n\n*(Note: Running in Simulation Mode. Add a valid OPENROUTER_API_KEY to your .env file to enable the live agent.)*"
+        reason_text = eligibility.get("reason", "Item is eligible under refund policy")
+        final_answer = (
+            f"Hello {order['name']}, I've reviewed your refund request for order **{order_id}**.\n\n"
+            f"**Eligibility:** {reason_text}\n\n"
+            f"Your refund has been **APPROVED**.\n\n"
+            f"**Product:** {order['product']}\n"
+            f"**Refund Amount:** ₹{order['amount']}\n"
+            f"**Timeline:** {refund_result['timeline']}\n"
+            f"**Confirmation sent to:** {order['email']}\n\n"
+            f"The refund will be credited to your original payment method. "
+            f"You'll receive an email confirmation shortly."
+        )
     else:
         reason = eligibility.get("reason", "Not eligible under standard refund policy")
         logs.append({
@@ -154,7 +170,15 @@ def run_simulation_agent(user_message: str, conversation_history: list) -> dict:
             "result": deny_result
         })
         
-        final_answer = f"Hello {order['name']}. I've checked the details for order {order_id} ({order['product']}). Unfortunately, your refund request has been denied.\n\n**Reason:** {reason}\n\nIf you have any questions, please let me know.\n\n*(Note: Running in Simulation Mode. Add a valid OPENROUTER_API_KEY to your .env file to enable the live agent.)*"
+        final_answer = (
+            f"Hello {order['name']}, I've reviewed your refund request for order **{order_id}** "
+            f"({order['product']}).\n\n"
+            f"After checking against our refund policy, I'm unable to approve this refund.\n\n"
+            f"**Reason for Denial:** {reason}\n\n"
+            f"Our refund policy is strictly enforced to ensure fairness for all customers. "
+            f"If you believe this decision is incorrect, you may contact our support team "
+            f"with additional documentation."
+        )
         
     logs.append({
         "step": "FINAL_ANSWER",
@@ -217,25 +241,31 @@ def run_openrouter_agent(user_message: str, conversation_history: list) -> dict:
     
     headers = {
         "Authorization": f"Bearer {openrouter_key}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
         "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "AI Refund Agent"
+        "X-Title": "AI Refund Agent -- Workpodd Challenge"
     }
     
-    # Run loop
+    # Agent loop with tool calling
+    max_iterations = 10
+    iteration = 0
+    
     try:
-        while True:
+        while iteration < max_iterations:
+            iteration += 1
             payload = {
                 "model": "meta-llama/llama-3.3-70b-instruct",
                 "messages": messages,
                 "tools": OPENAI_TOOLS,
-                "tool_choice": "auto"
+                "tool_choice": "auto",
+                "temperature": 0.1  # Low temperature for consistent policy enforcement
             }
             
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json=payload
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                timeout=30
             )
             
             if response.status_code != 200:
@@ -248,7 +278,7 @@ def run_openrouter_agent(user_message: str, conversation_history: list) -> dict:
             choice_msg = res_json["choices"][0]["message"]
             tool_calls = choice_msg.get("tool_calls")
             
-            # If no tool calls, this is the final answer!
+            # If no tool calls, this is the final answer
             if not tool_calls:
                 final_text = choice_msg.get("content") or ""
                 logs.append({"step": "FINAL_ANSWER", "content": final_text})
@@ -283,10 +313,13 @@ def run_openrouter_agent(user_message: str, conversation_history: list) -> dict:
                     "name": tool_name,
                     "content": json.dumps(result)
                 })
+        
+        # Max iterations reached
+        raise Exception("Agent loop exceeded maximum iterations without resolution")
                 
     except Exception as e:
         error_msg = str(e)
-        friendly_text = f"⚠️ **OpenRouter API Error:** {error_msg}"
+        friendly_text = f"⚠️ **Agent Error:** {error_msg}\n\nPlease try again or check backend logs."
         logs.append({"step": "FINAL_ANSWER", "content": friendly_text})
         return {
             "response": friendly_text,

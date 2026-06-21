@@ -15,8 +15,8 @@ def check_refund_eligibility(order_id: str) -> dict:
     if not order:
         return {"eligible": False, "reason": "Order not found"}
     
-    # Mock today as 2025-06-18 to match database dates
-    today = date(2025, 6, 18)
+    # Use real today's date (CRM data is set to 2026 dates)
+    today = date.today()
     purchase_date = datetime.strptime(order["purchase_date"], "%Y-%m-%d").date()
     days_since_purchase = (today - purchase_date).days
     
@@ -65,7 +65,7 @@ def approve_refund(order_id: str) -> dict:
     
     # Update CRM in-memory database status
     order["delivery_status"] = "Refunded"
-    order["last_refund_date"] = date(2025, 6, 18).strftime("%Y-%m-%d")
+    order["last_refund_date"] = date.today().strftime("%Y-%m-%d")
 
     return {
         "success": True,
